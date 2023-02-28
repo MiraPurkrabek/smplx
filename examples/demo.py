@@ -49,59 +49,10 @@ def main(model_folder,
         expression = torch.randn(
             [1, model.num_expression_coeffs], dtype=torch.float32)
 
-    body_pose = torch.zeros(model.body_pose.shape)
-    # body_pose = torch.rand(model.body_pose.shape)
-    
-    # Left leg back-front
-    # body_pose[0, 0] = 1
-    # Left counter-clockwise rotation
-    # body_pose[0, 1] = 1
-    # Left side bend
-    # body_pose[0, 2] = 1
-    # Right leg back-front
-    # body_pose[0, 3] = 1
-    # Right counter-clockwise rotation
-    # body_pose[0, 4] = 1
-    # Right side bend
-    # body_pose[0, 5] = -1
-    
-    # Torso front bend
-    # body_pose[0, 6] = 1
-    # Torso counter-clockwise bend
-    # body_pose[0, 7] = 1
-    # Torso right-side bend
-    # body_pose[0, 8] = 1
-    
-    # Left knee front bend
-    # body_pose[0, 9] = 1
-    # Left knee counter-clockwise rotation - is almost impossible
-    # body_pose[0, 10] = 1
-    # Left knee side-bend - is almost impossible
-    # body_pose[0, 11] = 1
-    # Right knee front bend
-    # body_pose[0, 12] = 1
-    # Left knee counter-clockwise rotation - is almost impossible
-    # body_pose[0, 13] = 1
-    # Left knee side-bend - is almost impossible
-    # body_pose[0, 14] = 1
-    
-    # Mid torso front-bend - possible???
-    # body_pose[0, 15] = 1
-    # Mid torso counter-clockwise rotation - possible???
-    # body_pose[0, 16] = 1
-    # Mid torso counter-clockwise rotation - possible???
-    # body_pose[0, 17] = 1
-
-    # ???
-    body_pose[0, 18] = 1
-
-
     output = model(betas=betas, expression=expression,
-                   return_verts=True, body_pose=body_pose)
+                   return_verts=True)
     vertices = output.vertices.detach().cpu().numpy().squeeze()
     joints = output.joints.detach().cpu().numpy().squeeze()
-
-    print(body_pose)
 
     print('Vertices shape =', vertices.shape)
     print('Joints shape =', joints.shape)
@@ -171,7 +122,7 @@ def main(model_folder,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SMPL-X Demo')
 
-    parser.add_argument('--model-folder', required=True, type=str,
+    parser.add_argument('--model-folder', default="models", type=str,
                         help='The path to the model folder')
     parser.add_argument('--model-type', default='smplx', type=str,
                         choices=['smpl', 'smplh', 'smplx', 'mano', 'flame'],
