@@ -166,23 +166,23 @@ JOINT_NAMES = [
 
 
 COCO_JOINTS = {
-    "nose": {"idx": 75-20, "range": 100},
-    "left eye": {"idx": 77-20, "range": 100},
-    "right eye": {"idx": 76-20, "range": 100},
-    "left ear": {"idx": 79-20, "range": 100},
-    "right ear": {"idx": 78-20, "range": 100},
-    "left shoulder": {"idx": 36-20, "range": 100},
-    'right_shoulder': {"idx": 37-20, "range": 100},
-    'left_elbow': {"idx": 38-20, "range": 100},
-    'right_elbow': {"idx": 39-20, "range": 100},
+    "nose": {"idx": 75-20, "range": 300},
+    "left eye": {"idx": 77-20, "range": 700},
+    "right eye": {"idx": 76-20, "range": 700},
+    "left ear": {"idx": 79-20, "range": 500},
+    "right ear": {"idx": 78-20, "range": 500},
+    "left shoulder": {"idx": 36-20, "range": 200},
+    'right_shoulder': {"idx": 37-20, "range": 200},
+    'left_elbow': {"idx": 38-20, "range": 150},
+    'right_elbow': {"idx": 39-20, "range": 150},
     'left_wrist': {"idx": 40-20, "range": 100},
     'right_wrist': {"idx": 41-20, "range": 100},
-    'left_hip': {"idx": 21-20, "range": 100},
-    'right_hip': {"idx": 22-20, "range": 100},
+    'left_hip': {"idx": 21-20, "range": 200},
+    'right_hip': {"idx": 22-20, "range": 200},
     'left_knee': {"idx": 24-20, "range": 100},
     'right_knee': {"idx": 25-20, "range": 100},
-    'left_ankle': {"idx": 27-20, "range": 100},
-    'right_ankle': {"idx": 28-20, "range": 100},
+    'left_ankle': {"idx": 27-20, "range": 50},
+    'right_ankle': {"idx": 28-20, "range": 50},
 }
 
 COCO_SKELETON = [
