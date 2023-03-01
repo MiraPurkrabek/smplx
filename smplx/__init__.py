@@ -28,3 +28,8 @@ from .body_models import (
     MANOLayer,
     FLAMELayer,
 )
+
+from .joint_names import(
+    COCO_JOINTS,
+    COCO_SKELETON,
+)

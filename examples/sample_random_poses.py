@@ -27,6 +27,9 @@ from tqdm import tqdm
 import json
 
 import smplx
+from smplx.joint_names import COCO_JOINTS
+
+from psbody.mesh import Mesh, MeshViewers
 
 TSHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm"]
 SHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm", "leftForeArm", "rightForeArm"]
@@ -204,6 +207,26 @@ def random_camera_pose(distance=3):
     return pose
 
 
+def m3dLookAt(eye, target, up):
+    eye = np.array(eye)
+    target = np.array(target)
+    up = np.array(up)
+    
+    mz = eye - target # inverse line of sight
+    mz = mz / np.linalg.norm(mz)
+    
+    mx = np.cross(up, mz)
+    mx = mx / np.linalg.norm(mx)
+    
+    my = np.cross(mz, mx)
+    my = my / np.linalg.norm(my)
+    
+    tx =   np.dot( mx, eye )
+    ty =   np.dot( my, eye )
+    tz = - np.dot( mz, eye )   
+    return np.array([mx[0], my[0], mz[0], 0, mx[1], my[1], mz[1], 0, mx[2], my[2], mz[2], 0, tx, ty, tz, 1])
+
+
 def generate_color(alpha=1.0):
     col = np.random.rand(3)
     col = np.concatenate([col, np.ones(1)*alpha], axis=0)
@@ -272,7 +295,14 @@ def main(model_folder,
             vertices = output.vertices.detach().cpu().numpy().squeeze()
             joints = output.joints.detach().cpu().numpy().squeeze()
 
-            print("Joints", joints.shape)
+            msh = Mesh(vertices, model.faces)
+
+            # mvs = MeshViewers(shape=(1, 1))
+            # mvs[0][0].set_static_meshes([msh])
+
+            # print(dir(model))
+            # print(model.faces.shape)
+            # print("Joints", joints.shape)
 
             # print('Vertices shape =', vertices.shape)
             # print('Joints shape =', joints.shape)
@@ -281,15 +311,9 @@ def main(model_folder,
                 import pyrender
                 import trimesh
                 
-                # Default color
-                # vertex_colors = np.ones([vertices.shape[0], 4]) * [0.909, 0.745, 0.675 , 1.0]
+                # Default (= skin) color
                 vertex_colors = np.ones([vertices.shape[0], 4]) * [0.28, 0.66, 1.0, 1.0]
-                # vertex_colors = np.ones([vertices.shape[0], 4]) * [1.0, 0.0, 0.0 , 1.0]
-                # vertex_colors = np.ones([vertices.shape[0], 4]) * [0.3, 0.3, 0.3, 1.0]
-
-                # BOTTOM_COLOR = [1.0, 0.0, 0.0, 1.0]
-                # TOP_COLOR = [0.0, 1.0, 0.0, 1.0]
-                # SHOES_COLOR = [0.0, 0.0, 1.0, 1.0]
+   
                 if np.random.rand(1)[0] < 0.5:
                     BOTTOM = PANTS_PARTS
                 else:    
@@ -315,11 +339,10 @@ def main(model_folder,
                 scene.add(mesh)
 
                 light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
-                scene.add(light, pose=  np.eye(4))
-                new_pose = - np.eye(4)
-                new_pose[-1, -1] = 1
-                scene.add(light, pose= new_pose)
-
+                diag = np.diag([2, 2, 2, 1])
+                scene.add(light, pose=diag)
+                diag = np.diag([-2, -1, -2, 1])
+                scene.add(light, pose=diag)
                 
                 if plot_joints:
                     sm = trimesh.creation.uv_sphere(radius=0.005)
@@ -336,19 +359,55 @@ def main(model_folder,
                     pyrender.Viewer(scene, use_raymond_lighting=True)
                 
                 else:
-                    camera = pyrender.PerspectiveCamera( yfov=np.pi / 3.0)
+                    camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
                     last_camera_node = None
                     for idx in range(num_views):    
                         if last_camera_node is not None:
                             scene.remove_node(last_camera_node)
                         
-                        pose = random_camera_pose(distance=camera_distance)
+                        T = random_camera_pose(distance=camera_distance)
 
-                        last_camera_node = scene.add(camera, pose=pose)
+                        t = T[:3, -1]
+                        R = T[:3, :3]
+
+                        K = camera.get_projection_matrix(1024, 1024)
+                        v = joints[[v for _, v in COCO_JOINTS.items()], :]
+                        vh = np.concatenate([v, np.ones((v.shape[0], 1))], axis=1)
+
+                        print(K)
+
+                        projected = K @ T @ vh.T
+
+                        points_2d = np.matmul(K, np.matmul(np.linalg.inv(T), vh.T)).T
+                        points_2d[:, 0] = (points_2d[:, 0] / points_2d[:, 3]) * 1024 / 2 + 1024 / 2
+                        points_2d[:, 1] = (points_2d[:, 1] / -points_2d[:, 3]) * 1024 / 2 + 1024 / 2
+                        points_2d = points_2d.astype(np.int32)
+
+                        projected = points_2d
+
+
+                        # projected = projected.T
+                        print("projected", projected.shape)
+                        print("projected range", np.min(projected, axis=0), np.max(projected, axis=0))
+                        
+                        last_camera_node = scene.add(camera, pose=T)
+
                         r = pyrender.OffscreenRenderer(1024, 1024)
                         color, _ = r.render(scene)
+                        color = color.astype(np.uint8)
+
+                        for pt in projected:
+                            color = cv2.drawMarker(
+                                color,
+                                (int(pt[0]),int(pt[1])),
+                                color=(0,0,255),
+                                markerType=cv2.MARKER_CROSS,
+                                thickness=2
+                            )
+
                         save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, idx))
                         cv2.imwrite(save_path.format(idx), color)
+                        progress_bar.update()
 
             
             elif plotting_module == 'matplotlib':
@@ -414,7 +473,7 @@ if __name__ == '__main__':
     parser.add_argument('--simplicity', default=1, type=int,
                         dest='simplicity',
                         help='Measure of simplicty. The higher the simpler poses')
-    parser.add_argument('--distance', default=1, type=int,
+    parser.add_argument('--distance', default=2, type=int,
                         dest='distance',
                         help='Distance of the camera from the mesh.')
     parser.add_argument('--num-expression-coeffs', default=10, type=int,
@@ -426,7 +485,7 @@ if __name__ == '__main__':
                         help='The module to use for plotting the result')
     parser.add_argument('--ext', type=str, default='npz',
                         help='Which extension to use for loading')
-    parser.add_argument('--plot-joints', default=True,
+    parser.add_argument('--plot-joints', default=False,
                         type=lambda arg: arg.lower() in ['true', '1'],
                         help='The path to the model folder')
     parser.add_argument('--show', default=False,

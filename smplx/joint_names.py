@@ -165,6 +165,49 @@ JOINT_NAMES = [
 ]
 
 
+COCO_JOINTS = {
+    "nose": 75-20,
+    "left eye": 77-20,
+    "right eye": 76-20,
+    "left ear": 79-20,
+    "right ear": 78-20,
+    "left shoulder": 36-20,
+    'right_shoulder': 37-20,
+    'left_elbow': 38-20,
+    'right_elbow': 39-20,
+    'left_wrist': 40-20,
+    'right_wrist': 41-20,
+    'left_hip': 21-20,
+    'right_hip': 22-20,
+    'left_knee': 24-20,
+    'right_knee': 25-20,
+    'left_ankle': 27-20,
+    'right_ankle': 28-20,
+}
+
+COCO_SKELETON = [
+        [16, 14],
+        [14, 12],
+        [17, 15],
+        [15, 13],
+        [12, 13],
+        [ 6, 12],
+        [ 7, 13],
+        [ 6,  7],
+        [ 6,  8],
+        [ 7,  9],
+        [ 8, 10],
+        [ 9, 11],
+        [ 2,  3],
+        [ 1,  2],
+        [ 1,  3],
+        [ 2,  4],
+        [ 3,  5],
+        [ 4,  6],
+        [ 5,  7],
+]
+
+
 SMPLH_JOINT_NAMES = [
     "pelvis",
     "left_hip",
