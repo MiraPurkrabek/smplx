@@ -36,6 +36,7 @@ SHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", 
 SHORTS_PARTS = ["rightUpLeg", "leftUpLeg"]
 PANTS_PARTS = ["rightUpLeg", "leftUpLeg", "leftLeg", "rightLeg"]
 SHOES_PARTS = ["leftToeBase", "rightToeBase", "leftFoot", "rightFoot", ]
+SKIN_COLOR = np.array([1.0, 0.66, 0.28, 1.0]) # RGB format
 
 
 def generate_pose(typical_pose=None, simplicity=5):
@@ -331,11 +332,11 @@ def main(model_folder,
                 import trimesh
                 
                 # Default (= skin) color
-                SKIN_COLOR = np.array([1.0, 0.66, 0.28, 1.0]) # RGB format
                 if args is not None and args.show:
-                    vertex_colors = np.ones([vertices.shape[0], 4]) * SKIN_COLOR
+                    skin_color = SKIN_COLOR
                 else:
-                    vertex_colors = np.ones([vertices.shape[0], 4]) * SKIN_COLOR[[2, 1, 0, 3]]
+                    skin_color = SKIN_COLOR[[2, 1, 0, 3]]
+                vertex_colors = np.ones([vertices.shape[0], 4]) * skin_color
    
                 if np.random.rand(1)[0] < 0.5:
                     BOTTOM = PANTS_PARTS
@@ -360,12 +361,12 @@ def main(model_folder,
 
                 mesh = pyrender.Mesh.from_trimesh(tri_mesh)
 
-                scene = pyrender.Scene()
+                scene = pyrender.Scene(bg_color=generate_color())
                 scene.add(mesh)
 
                 light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
-                for _ in range(3):
-                    scene.add(light, pose=random_camera_pose(distance=5))
+                for _ in range(5):
+                    scene.add(light, pose=random_camera_pose(distance=2*camera_distance))
                 
                 if args is not None and args.show:
                     # render scene
@@ -548,10 +549,10 @@ if __name__ == '__main__':
     parser.add_argument('--num-poses', default=1, type=int,
                         dest='num_poses',
                         help='Number of poses to sample.')
-    parser.add_argument('--simplicity', default=1, type=int,
+    parser.add_argument('--simplicity', default=1, type=float,
                         dest='simplicity',
                         help='Measure of simplicty. The higher the simpler poses')
-    parser.add_argument('--distance', default=2, type=int,
+    parser.add_argument('--distance', default=2, type=float,
                         dest='distance',
                         help='Distance of the camera from the mesh.')
     parser.add_argument('--num-expression-coeffs', default=10, type=int,
