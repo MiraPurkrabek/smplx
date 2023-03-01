@@ -19,6 +19,9 @@ import os
 import shutil
 import argparse
 
+import pyrender
+import trimesh            
+
 import numpy as np
 import torch
 import cv2
@@ -257,7 +260,6 @@ def main(model_folder,
          sample_shape=True,
          sample_expression=True,
          num_expression_coeffs=10,
-         plotting_module='pyrender',
          use_face_contour=False,
          num_poses=1,
          num_views=1,
@@ -327,204 +329,160 @@ def main(model_folder,
 
             msh = Mesh(vertices, model.faces)
 
-            if plotting_module == 'pyrender':
-                import pyrender
-                import trimesh
-                
-                # Default (= skin) color
-                if args is not None and args.show:
-                    skin_color = SKIN_COLOR
-                else:
-                    skin_color = SKIN_COLOR[[2, 1, 0, 3]]
-                vertex_colors = np.ones([vertices.shape[0], 4]) * skin_color
-   
-                if np.random.rand(1)[0] < 0.5:
-                    BOTTOM = PANTS_PARTS
-                else:    
-                    BOTTOM = SHORTS_PARTS
-                if np.random.rand(1)[0] < 0.5:
-                    TOP = TSHIRT_PARTS
-                else:    
-                    TOP = SHIRT_PARTS
-
-                segments = [TOP, BOTTOM, SHOES_PARTS]
-                segments_colors = [generate_color() for _ in segments]
-
-                for seg, seg_col in zip(segments, segments_colors):
-                    for body_part in seg:
-                        vertex_colors[seg_dict[body_part], :] = seg_col
-
-                joints_vertices = get_joints_vertices(coco_joints, vertices, joints_range)
-
-                tri_mesh = trimesh.Trimesh(vertices, model.faces,
-                                        vertex_colors=vertex_colors)
-
-                mesh = pyrender.Mesh.from_trimesh(tri_mesh)
-
-                scene = pyrender.Scene(bg_color=generate_color())
-                scene.add(mesh)
-
-                light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
-                for _ in range(5):
-                    scene.add(light, pose=random_camera_pose(distance=2*camera_distance))
-                
-                if args is not None and args.show:
-                    # render scene
-                    for view_idx in range(num_views):    
-                        progress_bar.update()
-                    pyrender.Viewer(scene, use_raymond_lighting=True)
-                
-                else:
-                    camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
-                    last_camera_node = None
-                    for view_idx in range(num_views):    
-                        if last_camera_node is not None:
-                            scene.remove_node(last_camera_node)
-                        
-                        T = random_camera_pose(distance=camera_distance)
-
-                        last_camera_node = scene.add(camera, pose=T)
-
-                        r = pyrender.OffscreenRenderer(1024, 1024)
-                        rendered_img, _ = r.render(scene)
-                        rendered_img = rendered_img.astype(np.uint8)
-
-                        # Name file differently to avoid confusion
-                        if plot_joints:
-                            img_name = "sampled_pose_{:02d}_view_{:02d}_GT.jpg".format(pose_i, view_idx)
-                        else:
-                            img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
-                        img_id = int(abs(hash(img_name)))
-                        
-                        cam = T[:3, -1].squeeze().tolist()
-                        visibilities = msh.vertex_visibility(
-                            camera = cam,
-                            omni_directional_camera = True
-                        )
-
-                        K = camera.get_projection_matrix(1024, 1024)
-                        
-                        joints_2d = project_to_2d(coco_joints, K, T)
-                        vertices_2d = project_to_2d(vertices, K, T)
-
-                        in_image = np.all(vertices_2d >= 0, axis=1)
-                        in_image = np.all(vertices_2d < 1024, axis=1) & in_image
-                        vertices_2d = vertices_2d[in_image, :]
-
-                        joints_vis = get_joints_visibilities(joints_vertices, visibilities)
-                        joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
-                        joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
-
-                        if plot_joints:
-                            for pi, pt in enumerate(joints_2d):
-                                marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
-                                thickness = 2 if joints_vis[pi] else 1
-                                rendered_img = cv2.drawMarker(
-                                    rendered_img,
-                                    tuple(pt.tolist()),
-                                    color=marker_color,
-                                    markerType=cv2.MARKER_CROSS,
-                                    thickness=thickness
-                                )
-
-                            for bone in COCO_SKELETON:
-                                b = np.array(bone) - 1 # COCO_SKELETON is 1-indexed
-                                if not (joints_vis[b[0]] and joints_vis[b[1]]):
-                                    continue
-                                
-                                start = joints_2d[b[0], :]
-                                end = joints_2d[b[1], :]
-                                rendered_img = cv2.line(
-                                    rendered_img,
-                                    start,
-                                    end,
-                                    thickness=1,
-                                    color=(0, 0, 255)
-                                )
-
-                            keypoints = np.concatenate([
-                                joints_2d,
-                                2*joints_vis.astype(np.float32).reshape((-1, 1))
-                            ], axis=1)
-
-                            keypoints[~ joints_vis, :] = 0
-
-                            bbox = np.array([
-                                np.min(vertices_2d[:, 0]),
-                                np.min(vertices_2d[:, 1]),
-                                np.max(vertices_2d[:, 0]),
-                                np.max(vertices_2d[:, 1]),
-                            ])
-
-                            if plot_joints:
-                                rendered_img = cv2.rectangle(
-                                    rendered_img,
-                                    (int(bbox[0]), int(bbox[1])),
-                                    (int(bbox[2]), int(bbox[3])),
-                                    color=(0, 255, 0),
-                                    thickness=1
-                                )
-
-                            gt_coco_dict["images"].append({
-                                "file_name": img_name,
-                                "height": 1024,
-                                "width": 1024,
-                                "id": img_id,
-                            })
-                            gt_coco_dict["annotations"].append({
-                                "num_keypoints": int(np.sum(joints_vis)),
-                                "iscrowd": 0,
-                                "keypoints": keypoints.flatten().tolist(),
-                                "image_id": img_id,
-                                "bbox": bbox.flatten().tolist(),
-                                "category_id": 1,
-                                "id": int(abs(hash(img_name + str(view_idx))))
-                            })
-
-                        save_path = osp.join(out_folder, img_name)
-                        cv2.imwrite(save_path.format(view_idx), rendered_img)
-
-                        progress_bar.update()
-
-            elif plotting_module == 'matplotlib':
-                from matplotlib import pyplot as plt
-                from mpl_toolkits.mplot3d import Axes3D
-                from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-
-                mesh = Poly3DCollection(vertices[model.faces], alpha=0.1)
-                face_color = (1.0, 1.0, 0.9)
-                edge_color = (0, 0, 0)
-                mesh.set_edgecolor(edge_color)
-                mesh.set_facecolor(face_color)
-                ax.add_collection3d(mesh)
-                ax.scatter(joints[:, 0], joints[:, 1], joints[:, 2], color='r')
-
-                if plot_joints:
-                    ax.scatter(joints[:, 0], joints[:, 1], joints[:, 2], alpha=0.1)
-                plt.show()
-            elif plotting_module == 'open3d':
-                import open3d as o3d
-
-                mesh = o3d.geometry.TriangleMesh()
-                mesh.vertices = o3d.utility.Vector3dVector(
-                    vertices)
-                mesh.triangles = o3d.utility.Vector3iVector(model.faces)
-                mesh.compute_vertex_normals()
-                mesh.paint_uniform_color([0.3, 0.3, 0.3])
-
-                geometry = [mesh]
-                if plot_joints:
-                    joints_pcl = o3d.geometry.PointCloud()
-                    joints_pcl.points = o3d.utility.Vector3dVector(joints)
-                    joints_pcl.paint_uniform_color([0.7, 0.3, 0.3])
-                    geometry.append(joints_pcl)
-
-                o3d.visualization.draw_geometries(geometry)
+            # Default (= skin) color
+            if args is not None and args.show:
+                skin_color = SKIN_COLOR
             else:
-                raise ValueError('Unknown plotting_module: {}'.format(plotting_module))
+                skin_color = SKIN_COLOR[[2, 1, 0, 3]]
+            vertex_colors = np.ones([vertices.shape[0], 4]) * skin_color
+
+            if np.random.rand(1)[0] < 0.5:
+                BOTTOM = PANTS_PARTS
+            else:    
+                BOTTOM = SHORTS_PARTS
+            if np.random.rand(1)[0] < 0.5:
+                TOP = TSHIRT_PARTS
+            else:    
+                TOP = SHIRT_PARTS
+
+            segments = [TOP, BOTTOM, SHOES_PARTS]
+            segments_colors = [generate_color() for _ in segments]
+
+            for seg, seg_col in zip(segments, segments_colors):
+                for body_part in seg:
+                    vertex_colors[seg_dict[body_part], :] = seg_col
+
+            joints_vertices = get_joints_vertices(coco_joints, vertices, joints_range)
+
+            tri_mesh = trimesh.Trimesh(vertices, model.faces,
+                                    vertex_colors=vertex_colors)
+
+            mesh = pyrender.Mesh.from_trimesh(tri_mesh)
+
+            scene = pyrender.Scene(bg_color=generate_color())
+            scene.add(mesh)
+
+            light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
+            for _ in range(5):
+                scene.add(light, pose=random_camera_pose(distance=2*camera_distance))
+            
+            if args is not None and args.show:
+                # render scene
+                for view_idx in range(num_views):    
+                    progress_bar.update()
+                pyrender.Viewer(scene, use_raymond_lighting=True)
+            
+            else:
+                camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
+                last_camera_node = None
+                for view_idx in range(num_views):    
+                    if last_camera_node is not None:
+                        scene.remove_node(last_camera_node)
+                    
+                    T = random_camera_pose(distance=camera_distance)
+
+                    last_camera_node = scene.add(camera, pose=T)
+
+                    r = pyrender.OffscreenRenderer(1024, 1024)
+                    rendered_img, _ = r.render(scene)
+                    rendered_img = rendered_img.astype(np.uint8)
+
+                    # Name file differently to avoid confusion
+                    if plot_joints:
+                        img_name = "sampled_pose_{:02d}_view_{:02d}_GT.jpg".format(pose_i, view_idx)
+                    else:
+                        img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
+                    img_id = int(abs(hash(img_name)))
+                    
+                    cam = T[:3, -1].squeeze().tolist()
+                    visibilities = msh.vertex_visibility(
+                        camera = cam,
+                        omni_directional_camera = True
+                    )
+
+                    K = camera.get_projection_matrix(1024, 1024)
+                    
+                    joints_2d = project_to_2d(coco_joints, K, T)
+                    vertices_2d = project_to_2d(vertices, K, T)
+
+                    in_image = np.all(vertices_2d >= 0, axis=1)
+                    in_image = np.all(vertices_2d < 1024, axis=1) & in_image
+                    vertices_2d = vertices_2d[in_image, :]
+
+                    joints_vis = get_joints_visibilities(joints_vertices, visibilities)
+                    joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
+                    joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
+
+                    if plot_joints:
+                        for pi, pt in enumerate(joints_2d):
+                            marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
+                            thickness = 2 if joints_vis[pi] else 1
+                            rendered_img = cv2.drawMarker(
+                                rendered_img,
+                                tuple(pt.tolist()),
+                                color=marker_color,
+                                markerType=cv2.MARKER_CROSS,
+                                thickness=thickness
+                            )
+
+                        for bone in COCO_SKELETON:
+                            b = np.array(bone) - 1 # COCO_SKELETON is 1-indexed
+                            if not (joints_vis[b[0]] and joints_vis[b[1]]):
+                                continue
+                            
+                            start = joints_2d[b[0], :]
+                            end = joints_2d[b[1], :]
+                            rendered_img = cv2.line(
+                                rendered_img,
+                                start,
+                                end,
+                                thickness=1,
+                                color=(0, 0, 255)
+                            )
+
+                        keypoints = np.concatenate([
+                            joints_2d,
+                            2*joints_vis.astype(np.float32).reshape((-1, 1))
+                        ], axis=1)
+
+                        keypoints[~ joints_vis, :] = 0
+
+                        bbox = np.array([
+                            np.min(vertices_2d[:, 0]),
+                            np.min(vertices_2d[:, 1]),
+                            np.max(vertices_2d[:, 0]),
+                            np.max(vertices_2d[:, 1]),
+                        ])
+
+                        if plot_joints:
+                            rendered_img = cv2.rectangle(
+                                rendered_img,
+                                (int(bbox[0]), int(bbox[1])),
+                                (int(bbox[2]), int(bbox[3])),
+                                color=(0, 255, 0),
+                                thickness=1
+                            )
+
+                        gt_coco_dict["images"].append({
+                            "file_name": img_name,
+                            "height": 1024,
+                            "width": 1024,
+                            "id": img_id,
+                        })
+                        gt_coco_dict["annotations"].append({
+                            "num_keypoints": int(np.sum(joints_vis)),
+                            "iscrowd": 0,
+                            "keypoints": keypoints.flatten().tolist(),
+                            "image_id": img_id,
+                            "bbox": bbox.flatten().tolist(),
+                            "category_id": 1,
+                            "id": int(abs(hash(img_name + str(view_idx))))
+                        })
+
+                    save_path = osp.join(out_folder, img_name)
+                    cv2.imwrite(save_path.format(view_idx), rendered_img)
+
+                    progress_bar.update()
         
         gt_filename = os.path.join(out_folder, "coco_annotations.json")
         with open(gt_filename, "w") as fp:
@@ -559,10 +517,6 @@ if __name__ == '__main__':
     parser.add_argument('--num-expression-coeffs', default=10, type=int,
                         dest='num_expression_coeffs',
                         help='Number of expression coefficients.')
-    parser.add_argument('--plotting-module', type=str, default='pyrender',
-                        dest='plotting_module',
-                        choices=['pyrender', 'matplotlib', 'open3d'],
-                        help='The module to use for plotting the result')
     parser.add_argument('--ext', type=str, default='npz',
                         help='Which extension to use for loading')
     parser.add_argument('--plot-joints', default=False,
@@ -592,7 +546,6 @@ if __name__ == '__main__':
     use_face_contour = args.use_face_contour
     gender = args.gender
     ext = args.ext
-    plotting_module = args.plotting_module
     num_betas = args.num_betas
     num_expression_coeffs = args.num_expression_coeffs
     sample_shape = args.sample_shape
@@ -604,7 +557,6 @@ if __name__ == '__main__':
          num_expression_coeffs=num_expression_coeffs,
          sample_shape=sample_shape,
          sample_expression=sample_expression,
-         plotting_module=plotting_module,
          use_face_contour=use_face_contour,
          num_poses = args.num_poses,
          num_views = args.num_views,
