@@ -27,7 +27,7 @@ from tqdm import tqdm
 import json
 
 import smplx
-from smplx.joint_names import COCO_JOINTS
+from smplx.joint_names import COCO_JOINTS, COCO_SKELETON
 
 from psbody.mesh import Mesh, MeshViewers
 
@@ -182,6 +182,7 @@ def generate_pose(typical_pose=None, simplicity=5):
 
 def random_camera_pose(distance=3):
     t = np.random.rand(3) * 2 - 1
+
     t_norm = t / np.linalg.norm(t)
     # t = t_norm
     t = t_norm * distance
@@ -206,25 +207,52 @@ def random_camera_pose(distance=3):
     ])
     return pose
 
+def lineseg_dist(p, a, b):
+    # normalized tangent vector
+    d = np.divide(b - a, np.linalg.norm(b - a))
 
-def m3dLookAt(eye, target, up):
-    eye = np.array(eye)
-    target = np.array(target)
-    up = np.array(up)
-    
-    mz = eye - target # inverse line of sight
-    mz = mz / np.linalg.norm(mz)
-    
-    mx = np.cross(up, mz)
-    mx = mx / np.linalg.norm(mx)
-    
-    my = np.cross(mz, mx)
-    my = my / np.linalg.norm(my)
-    
-    tx =   np.dot( mx, eye )
-    ty =   np.dot( my, eye )
-    tz = - np.dot( mz, eye )   
-    return np.array([mx[0], my[0], mz[0], 0, mx[1], my[1], mz[1], 0, mx[2], my[2], mz[2], 0, tx, ty, tz, 1])
+    # signed parallel distance components
+    s = np.dot(a - p, d)
+    t = np.dot(p - b, d)
+
+    # clamped parallel distance
+    h = np.maximum.reduce([s, t, np.zeros(s.shape)])
+
+    # perpendicular distance component
+    c = np.cross(p - a, d)
+
+    return np.hypot(h, np.linalg.norm(c))
+
+def lineseg_dist_2(rs, p, q):
+    x = p-q
+    return np.linalg.norm(
+        np.outer(np.dot(rs-q, x)/np.dot(x, x), x)+q-rs,
+        axis=1)
+
+def get_joints_visibility(joints, vertices, visibilities, camera):
+    camera = np.array(camera)
+    vis = np.ones((joints.shape[0]))
+    idxs = []
+
+    for ji, j in enumerate(joints):
+        print("\n==========\n{:s}".format(list(COCO_JOINTS.keys())[ji]))
+        
+        dists_to_line = lineseg_dist_2(vertices, j, camera)
+        # print(j, camera)
+        print("Min and max distances", np.min(dists_to_line), np.max(dists_to_line))
+        dist_to_vs = np.linalg.norm(vertices - j, axis=1)
+        # criterion = 5*dists_to_line + dist_to_vs
+        criterion = dist_to_vs
+        min_idxs = np.argsort(criterion)
+        tst = np.where(criterion < 0.1)[0]
+        # v_idx = np.argmin(criterion)
+        v_idx = min_idxs[:80]
+        # v_idx = tst
+        idxs.append(v_idx)
+        print("Num nodes smaller than thr", v_idx.shape)
+        vis[ji] = np.any(visibilities[v_idx])
+
+    return vis.astype(bool), idxs
 
 
 def generate_color(alpha=1.0):
@@ -294,11 +322,9 @@ def main(model_folder,
                         return_verts=True, body_pose=body_pose)
             vertices = output.vertices.detach().cpu().numpy().squeeze()
             joints = output.joints.detach().cpu().numpy().squeeze()
+            coco_joints = joints[[v for _, v in COCO_JOINTS.items()], :]
 
             msh = Mesh(vertices, model.faces)
-
-            # mvs = MeshViewers(shape=(1, 1))
-            # mvs[0][0].set_static_meshes([msh])
 
             # print(dir(model))
             # print(model.faces.shape)
@@ -330,6 +356,12 @@ def main(model_folder,
                     for body_part in seg:
                         vertex_colors[seg_dict[body_part], :] = seg_col
 
+                _, idxs = get_joints_visibility(coco_joints, vertices, np.ones((vertices.shape[0])), np.array([0, 0, 0]))
+
+                for j_idxs in idxs:
+                    vertex_colors[j_idxs, :] = (1, 0, 0, 1)
+
+
                 tri_mesh = trimesh.Trimesh(vertices, model.faces,
                                         vertex_colors=vertex_colors)
 
@@ -344,13 +376,13 @@ def main(model_folder,
                 diag = np.diag([-2, -1, -2, 1])
                 scene.add(light, pose=diag)
                 
-                if plot_joints:
-                    sm = trimesh.creation.uv_sphere(radius=0.005)
-                    sm.visual.vertex_colors = [0.1, 0.1, 0.9, 1.0]
-                    tfs = np.tile(np.eye(4), (len(joints), 1, 1))
-                    tfs[:, :3, 3] = joints
-                    joints_pcl = pyrender.Mesh.from_trimesh(sm, poses=tfs)
-                    scene.add(joints_pcl)
+                # if plot_joints:
+                #     sm = trimesh.creation.uv_sphere(radius=0.005)
+                #     sm.visual.vertex_colors = [0.1, 0.1, 0.9, 1.0]
+                #     tfs = np.tile(np.eye(4), (len(joints), 1, 1))
+                #     tfs[:, :3, 3] = joints
+                #     joints_pcl = pyrender.Mesh.from_trimesh(sm, poses=tfs)
+                #     scene.add(joints_pcl)
 
                 if args is not None and args.show:
                     # render scene
@@ -361,52 +393,87 @@ def main(model_folder,
                 else:
                     camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
                     last_camera_node = None
+                    # mvs = MeshViewers(shape=(1, num_views))
                     for idx in range(num_views):    
                         if last_camera_node is not None:
                             scene.remove_node(last_camera_node)
                         
                         T = random_camera_pose(distance=camera_distance)
 
-                        t = T[:3, -1]
-                        R = T[:3, :3]
-
-                        K = camera.get_projection_matrix(1024, 1024)
-                        v = joints[[v for _, v in COCO_JOINTS.items()], :]
-                        vh = np.concatenate([v, np.ones((v.shape[0], 1))], axis=1)
-
-                        print(K)
-
-                        projected = K @ T @ vh.T
-
-                        points_2d = np.matmul(K, np.matmul(np.linalg.inv(T), vh.T)).T
-                        points_2d[:, 0] = (points_2d[:, 0] / points_2d[:, 3]) * 1024 / 2 + 1024 / 2
-                        points_2d[:, 1] = (points_2d[:, 1] / -points_2d[:, 3]) * 1024 / 2 + 1024 / 2
-                        points_2d = points_2d.astype(np.int32)
-
-                        projected = points_2d
-
-
-                        # projected = projected.T
-                        print("projected", projected.shape)
-                        print("projected range", np.min(projected, axis=0), np.max(projected, axis=0))
-                        
                         last_camera_node = scene.add(camera, pose=T)
 
                         r = pyrender.OffscreenRenderer(1024, 1024)
                         color, _ = r.render(scene)
                         color = color.astype(np.uint8)
 
-                        for pt in projected:
-                            color = cv2.drawMarker(
-                                color,
-                                (int(pt[0]),int(pt[1])),
-                                color=(0,0,255),
-                                markerType=cv2.MARKER_CROSS,
-                                thickness=2
+                        # save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, idx))
+                        # cv2.imwrite(save_path.format(idx), color)
+                        
+                        if plot_joints:
+                            
+                            cam = T[:3, -1].squeeze().tolist()
+                            visibilities = msh.vertex_visibility(
+                                camera = cam,
+                                omni_directional_camera = True
                             )
 
-                        save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, idx))
-                        cv2.imwrite(save_path.format(idx), color)
+                            # mvs[0][idx].set_static_meshes([msh.visibile_mesh(camera=cam)])
+
+                            joints_vis, idxs = get_joints_visibility(
+                                coco_joints,
+                                vertices,
+                                visibilities,
+                                cam
+                            )
+                            print(idxs)
+
+                            K = camera.get_projection_matrix(1024, 1024)
+                            v = coco_joints
+                            vh = np.concatenate([v, np.ones((v.shape[0], 1))], axis=1)
+
+                            points_2d = (K @ np.linalg.inv(T) @ vh.T).T
+                            points_2d[:, 0] = (points_2d[:, 0] / points_2d[:, 3]) * 1024 / 2 + 1024 / 2
+                            points_2d[:, 1] = (points_2d[:, 1] / -points_2d[:, 3]) * 1024 / 2 + 1024 / 2
+                            points_2d = points_2d.astype(np.int32)
+                            projected = points_2d[:, :2]
+
+                            joints_vis = np.all(projected >= 0, axis=1) & joints_vis
+                            joints_vis = np.all(projected < 1024, axis=1) & joints_vis
+
+                            # For now, ignore hips and shoulders
+                            # joints_vis[[5, 6, 11, 12]] = False
+                            
+                            for pi, pt in enumerate(projected):
+                                # if not joints_vis[pi]:
+                                #     continue
+
+                                marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
+                                thickness = 2 if joints_vis[pi] else 1
+                                color = cv2.drawMarker(
+                                    color,
+                                    tuple(pt.tolist()),
+                                    color=marker_color,
+                                    markerType=cv2.MARKER_CROSS,
+                                    thickness=thickness
+                                )
+
+                            for bone in COCO_SKELETON:
+                                b = np.array(bone) - 1 # COCO_SKELETON is 1-indexed
+                                if not (joints_vis[b[0]] and joints_vis[b[1]]):
+                                    continue
+                                
+                                start = projected[b[0], :]
+                                end = projected[b[1], :]
+                                color = cv2.line(
+                                    color,
+                                    start,
+                                    end,
+                                    thickness=1,
+                                    color=(0, 0, 255)
+                                )
+                            save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}_gt.jpg".format(pose_i, idx))
+                            cv2.imwrite(save_path.format(idx), color)
+
                         progress_bar.update()
 
             
