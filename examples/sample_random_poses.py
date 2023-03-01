@@ -179,6 +179,7 @@ def generate_pose(typical_pose=None, simplicity=5):
 
     return body_pose
 
+
 def random_camera_pose(distance=3):
     t = np.random.rand(3) * 2 - 1
 
@@ -235,6 +236,17 @@ def generate_color(alpha=1.0):
     return col
 
 
+def project_to_2d(pts, K, T):
+    pts_h = np.concatenate([pts, np.ones((pts.shape[0], 1))], axis=1)
+    points_2d = (K @ np.linalg.inv(T) @ pts_h.T).T
+    points_2d[:, 0] = (points_2d[:, 0] / points_2d[:, 3]) * 1024 / 2 + 1024 / 2
+    points_2d[:, 1] = (points_2d[:, 1] / -points_2d[:, 3]) * 1024 / 2 + 1024 / 2
+    points_2d = points_2d.astype(np.int32)
+    points_2d = points_2d[:, :2]
+    
+    return points_2d
+
+
 def main(model_folder,
          model_type='smplx',
          ext='npz',
@@ -267,6 +279,19 @@ def main(model_folder,
     with open("models/smplx/SMPLX_segmentation.json", "r") as fp:
         seg_dict = json.load(fp)
 
+    gt_coco_dict = {
+        "images": [],
+        "annotations": [],
+        "categories": [
+            {
+                "supercategory": "person",
+                "id": 1,
+                "name": "person",
+                "keypoints": list(COCO_JOINTS.keys()),
+                "skeleton": COCO_SKELETON,
+            },
+        ]
+    }
 
     print("Generating poses and views...")
     with tqdm(total=num_views * num_poses) as progress_bar:
@@ -306,7 +331,11 @@ def main(model_folder,
                 import trimesh
                 
                 # Default (= skin) color
-                vertex_colors = np.ones([vertices.shape[0], 4]) * [1.0, 0.66, 0.28, 1.0]
+                SKIN_COLOR = np.array([1.0, 0.66, 0.28, 1.0]) # RGB format
+                if args is not None and args.show:
+                    vertex_colors = np.ones([vertices.shape[0], 4]) * SKIN_COLOR
+                else:
+                    vertex_colors = np.ones([vertices.shape[0], 4]) * SKIN_COLOR[[2, 1, 0, 3]]
    
                 if np.random.rand(1)[0] < 0.5:
                     BOTTOM = PANTS_PARTS
@@ -340,14 +369,14 @@ def main(model_folder,
                 
                 if args is not None and args.show:
                     # render scene
-                    for idx in range(num_views):    
+                    for view_idx in range(num_views):    
                         progress_bar.update()
                     pyrender.Viewer(scene, use_raymond_lighting=True)
                 
                 else:
                     camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
                     last_camera_node = None
-                    for idx in range(num_views):    
+                    for view_idx in range(num_views):    
                         if last_camera_node is not None:
                             scene.remove_node(last_camera_node)
                         
@@ -359,8 +388,10 @@ def main(model_folder,
                         color, _ = r.render(scene)
                         color = color.astype(np.uint8)
 
-                        save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, idx))
-                        cv2.imwrite(save_path.format(idx), color)
+                        img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
+                        img_id = int(abs(hash(img_name)))
+                        save_path = osp.join(out_folder, img_name)
+                        cv2.imwrite(save_path.format(view_idx), color)
                         
                         if plot_joints:
                             
@@ -370,23 +401,20 @@ def main(model_folder,
                                 omni_directional_camera = True
                             )
 
-                            joints_vis = get_joints_visibilities(joints_vertices, visibilities)
-
                             K = camera.get_projection_matrix(1024, 1024)
-                            v = coco_joints
-                            vh = np.concatenate([v, np.ones((v.shape[0], 1))], axis=1)
-
-                            points_2d = (K @ np.linalg.inv(T) @ vh.T).T
-                            points_2d[:, 0] = (points_2d[:, 0] / points_2d[:, 3]) * 1024 / 2 + 1024 / 2
-                            points_2d[:, 1] = (points_2d[:, 1] / -points_2d[:, 3]) * 1024 / 2 + 1024 / 2
-                            points_2d = points_2d.astype(np.int32)
-                            projected = points_2d[:, :2]
-
-                            joints_vis = np.all(projected >= 0, axis=1) & joints_vis
-                            joints_vis = np.all(projected < 1024, axis=1) & joints_vis
-
                             
-                            for pi, pt in enumerate(projected):
+                            joints_2d = project_to_2d(coco_joints, K, T)
+                            vertices_2d = project_to_2d(vertices, K, T)
+
+                            in_image = np.all(vertices_2d >= 0, axis=1)
+                            in_image = np.all(vertices_2d < 1024, axis=1) & in_image
+                            vertices_2d = vertices_2d[in_image, :]
+
+                            joints_vis = get_joints_visibilities(joints_vertices, visibilities)
+                            joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
+                            joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
+
+                            for pi, pt in enumerate(joints_2d):
                                 marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
                                 thickness = 2 if joints_vis[pi] else 1
                                 color = cv2.drawMarker(
@@ -402,8 +430,8 @@ def main(model_folder,
                                 if not (joints_vis[b[0]] and joints_vis[b[1]]):
                                     continue
                                 
-                                start = projected[b[0], :]
-                                end = projected[b[1], :]
+                                start = joints_2d[b[0], :]
+                                end = joints_2d[b[1], :]
                                 color = cv2.line(
                                     color,
                                     start,
@@ -411,12 +439,50 @@ def main(model_folder,
                                     thickness=1,
                                     color=(0, 0, 255)
                                 )
-                            save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}_gt.jpg".format(pose_i, idx))
-                            cv2.imwrite(save_path.format(idx), color)
+
+                            keypoints = np.concatenate([
+                                joints_2d,
+                                2*joints_vis.astype(np.float32).reshape((-1, 1))
+                            ], axis=1)
+
+                            keypoints[~ joints_vis, :] = 0
+
+                            bbox = np.array([
+                                np.min(vertices_2d[:, 0]),
+                                np.min(vertices_2d[:, 1]),
+                                np.max(vertices_2d[:, 0]),
+                                np.max(vertices_2d[:, 1]),
+                            ])
+
+                            color = cv2.rectangle(
+                                color,
+                                (int(bbox[0]), int(bbox[1])),
+                                (int(bbox[2]), int(bbox[3])),
+                                color=(0, 255, 0),
+                                thickness=1
+                            )
+
+                            gt_coco_dict["images"].append({
+                                "file_name": img_name,
+                                "height": 1024,
+                                "width": 1024,
+                                "id": img_id,
+                            })
+                            gt_coco_dict["annotations"].append({
+                                "num_keypoints": int(np.sum(joints_vis)),
+                                "iscrowd": 0,
+                                "keypoints": keypoints.flatten().tolist(),
+                                "image_id": img_id,
+                                "bbox": bbox.flatten().tolist(),
+                                "category_id": 1,
+                                "id": int(abs(hash(img_name + str(view_idx))))
+                            })
+
+                            save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}_gt.jpg".format(pose_i, view_idx))
+                            cv2.imwrite(save_path.format(view_idx), color)
 
                         progress_bar.update()
 
-            
             elif plotting_module == 'matplotlib':
                 from matplotlib import pyplot as plt
                 from mpl_toolkits.mplot3d import Axes3D
@@ -456,6 +522,11 @@ def main(model_folder,
                 o3d.visualization.draw_geometries(geometry)
             else:
                 raise ValueError('Unknown plotting_module: {}'.format(plotting_module))
+        
+        if plot_joints:
+            gt_filename = os.path.join(out_folder, "coco_annotations.json")
+            with open(gt_filename, "w") as fp:
+                json.dump(gt_coco_dict, fp, indent=2)
 
 
 if __name__ == '__main__':
