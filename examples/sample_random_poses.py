@@ -251,33 +251,10 @@ def project_to_2d(pts, K, T):
     return points_2d
 
 
-def main(model_folder,
-         model_type='smplx',
-         ext='npz',
-         gender='neutral',
-         plot_joints=False,
-         num_betas=10,
-         sample_shape=True,
-         sample_expression=True,
-         num_expression_coeffs=10,
-         use_face_contour=False,
-         num_poses=1,
-         num_views=1,
-         out_folder="sampled_poses",
-         args=None):
+def main(args):
     
-    if args is not None:
-        simplicity=args.simplicity
-    else:
-        simplicity=1
-    
-    if args is not None:
-        camera_distance=args.distance
-    else:
-        camera_distance=3
-
-    shutil.rmtree(out_folder, ignore_errors=True)
-    os.makedirs(out_folder, exist_ok=True)
+    shutil.rmtree(args.out_folder, ignore_errors=True)
+    os.makedirs(args.out_folder, exist_ok=True)
     
     with open("models/smplx/SMPLX_segmentation.json", "r") as fp:
         seg_dict = json.load(fp)
@@ -297,28 +274,28 @@ def main(model_folder,
     }
 
     print("Generating poses and views...")
-    with tqdm(total=num_views * num_poses) as progress_bar:
+    with tqdm(total=args.num_views * args.num_poses) as progress_bar:
 
-        for pose_i in range(num_poses):
-            if gender.upper() == "RANDOM":
+        for pose_i in range(args.num_poses):
+            if args.gender.upper() == "RANDOM":
                 gndr = np.random.choice(["male", "female", "neutral"])
             else:
-                gndr = gender
+                gndr = args.gender
 
-            model = smplx.create(model_folder, model_type=model_type,
-                                gender=gndr, use_face_contour=use_face_contour,
-                                num_betas=num_betas,
-                                num_expression_coeffs=num_expression_coeffs,
-                                ext=ext)
+            model = smplx.create(args.model_folder, model_type=args.model_type,
+                                gender=gndr, use_face_contour=args.use_face_contour,
+                                num_betas=args.num_betas,
+                                num_expression_coeffs=args.num_expression_coeffs,
+                                ext=args.model_ext)
             
             betas, expression = None, None
-            if sample_shape:
+            if args.sample_shape:
                 betas = torch.randn([1, model.num_betas], dtype=torch.float32)
-            if sample_expression:
+            if args.sample_expression:
                 expression = torch.randn(
                     [1, model.num_expression_coeffs], dtype=torch.float32)
 
-            body_pose = generate_pose(simplicity=simplicity)
+            body_pose = generate_pose(simplicity=args.pose_simplicity)
 
             output = model(betas=betas, expression=expression,
                         return_verts=True, body_pose=body_pose)
@@ -364,22 +341,22 @@ def main(model_folder,
 
             light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
             for _ in range(5):
-                scene.add(light, pose=random_camera_pose(distance=2*camera_distance))
+                scene.add(light, pose=random_camera_pose(distance=2*args.camera_distance))
             
             if args is not None and args.show:
                 # render scene
-                for view_idx in range(num_views):    
+                for view_idx in range(args.num_views):    
                     progress_bar.update()
                 pyrender.Viewer(scene, use_raymond_lighting=True)
             
             else:
                 camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
                 last_camera_node = None
-                for view_idx in range(num_views):    
+                for view_idx in range(args.num_views):    
                     if last_camera_node is not None:
                         scene.remove_node(last_camera_node)
                     
-                    T = random_camera_pose(distance=camera_distance)
+                    T = random_camera_pose(distance=args.camera_distance)
 
                     last_camera_node = scene.add(camera, pose=T)
 
@@ -388,7 +365,7 @@ def main(model_folder,
                     rendered_img = rendered_img.astype(np.uint8)
 
                     # Name file differently to avoid confusion
-                    if plot_joints:
+                    if args.plot_gt:
                         img_name = "sampled_pose_{:02d}_view_{:02d}_GT.jpg".format(pose_i, view_idx)
                     else:
                         img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
@@ -413,7 +390,7 @@ def main(model_folder,
                     joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
                     joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
 
-                    if plot_joints:
+                    if args.plot_gt:
                         for pi, pt in enumerate(joints_2d):
                             marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
                             thickness = 2 if joints_vis[pi] else 1
@@ -454,7 +431,7 @@ def main(model_folder,
                             np.max(vertices_2d[:, 1]),
                         ])
 
-                        if plot_joints:
+                        if args.plot_gt:
                             rendered_img = cv2.rectangle(
                                 rendered_img,
                                 (int(bbox[0]), int(bbox[1])),
@@ -479,12 +456,12 @@ def main(model_folder,
                             "id": int(abs(hash(img_name + str(view_idx))))
                         })
 
-                    save_path = osp.join(out_folder, img_name)
+                    save_path = osp.join(args.out_folder, img_name)
                     cv2.imwrite(save_path.format(view_idx), rendered_img)
 
                     progress_bar.update()
         
-        gt_filename = os.path.join(out_folder, "coco_annotations.json")
+        gt_filename = os.path.join(args.out_folder, "coco_annotations.json")
         with open(gt_filename, "w") as fp:
             json.dump(gt_coco_dict, fp, indent=2)
 
@@ -492,6 +469,7 @@ def main(model_folder,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SMPL-X Demo')
 
+    # Original params
     parser.add_argument('--model-folder', default="models", type=str,
                         help='The path to the model folder')
     parser.add_argument('--model-type', default='smplx', type=str,
@@ -502,63 +480,43 @@ if __name__ == '__main__':
     parser.add_argument('--num-betas', default=10, type=int,
                         dest='num_betas',
                         help='Number of shape coefficients.')
+    parser.add_argument('--num-expression-coeffs', default=10, type=int,
+                        dest='num_expression_coeffs',
+                        help='Number of expression coefficients.')
+    parser.add_argument('--model-ext', type=str, default='npz',
+                        help='Which extension to use for loading')
+    parser.add_argument('--sample-shape',
+                        action="store_true", default=True,
+                        help='Sample a random shape')
+    parser.add_argument('--sample-expression',
+                        action="store_true", default=True,
+                        help='Sample a random expression')
+    parser.add_argument('--use-face-contour',
+                        action="store_true", default=False,
+                        help='Compute the contour of the face')
+    # Added params
     parser.add_argument('--num-views', default=3, type=int,
                         dest='num_views',
                         help='Number of views for each pose.')
     parser.add_argument('--num-poses', default=1, type=int,
                         dest='num_poses',
                         help='Number of poses to sample.')
-    parser.add_argument('--simplicity', default=1, type=float,
-                        dest='simplicity',
+    parser.add_argument('--pose-simplicity', default=1, type=float,
+                        dest='pose_simplicity',
                         help='Measure of simplicty. The higher the simpler poses')
-    parser.add_argument('--distance', default=2, type=float,
-                        dest='distance',
+    parser.add_argument('--camera-distance', default=2, type=float,
+                        dest='camera_distance',
                         help='Distance of the camera from the mesh.')
-    parser.add_argument('--num-expression-coeffs', default=10, type=int,
-                        dest='num_expression_coeffs',
-                        help='Number of expression coefficients.')
-    parser.add_argument('--ext', type=str, default='npz',
-                        help='Which extension to use for loading')
-    parser.add_argument('--plot-joints', default=False,
-                        type=lambda arg: arg.lower() in ['true', '1'],
-                        help='The path to the model folder')
-    parser.add_argument('--show', default=False,
-                        help='If True, will render and show results instead of saving images')
-    parser.add_argument('--sample-shape', default=True,
-                        dest='sample_shape',
-                        type=lambda arg: arg.lower() in ['true', '1'],
-                        help='Sample a random shape')
-    parser.add_argument('--sample-expression', default=True,
-                        dest='sample_expression',
-                        type=lambda arg: arg.lower() in ['true', '1'],
-                        help='Sample a random expression')
-    parser.add_argument('--use-face-contour', default=False,
-                        type=lambda arg: arg.lower() in ['true', '1'],
-                        help='Compute the contour of the face')
     parser.add_argument('--out-folder', default="sampled_poses",
                         help='Output folder')
+    parser.add_argument('--plot-gt',
+                        action="store_true", default=False,
+                        help='The path to the model folder')
+    parser.add_argument('--show',
+                        action="store_true", default=False,
+                        help='If True, will render and show results instead of saving images')
 
     args = parser.parse_args()
+    args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))
 
-    model_folder = osp.expanduser(osp.expandvars(args.model_folder))
-    model_type = args.model_type
-    plot_joints = args.plot_joints
-    use_face_contour = args.use_face_contour
-    gender = args.gender
-    ext = args.ext
-    num_betas = args.num_betas
-    num_expression_coeffs = args.num_expression_coeffs
-    sample_shape = args.sample_shape
-    sample_expression = args.sample_expression
-
-    main(model_folder, model_type, ext=ext,
-         gender=gender, plot_joints=plot_joints,
-         num_betas=num_betas,
-         num_expression_coeffs=num_expression_coeffs,
-         sample_shape=sample_shape,
-         sample_expression=sample_expression,
-         use_face_contour=use_face_contour,
-         num_poses = args.num_poses,
-         num_views = args.num_views,
-         out_folder = args.out_folder,
-         args=args)
+    main(args)
