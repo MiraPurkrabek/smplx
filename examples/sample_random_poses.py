@@ -179,7 +179,6 @@ def generate_pose(typical_pose=None, simplicity=5):
 
     return body_pose
 
-
 def random_camera_pose(distance=3):
     t = np.random.rand(3) * 2 - 1
 
@@ -207,52 +206,26 @@ def random_camera_pose(distance=3):
     ])
     return pose
 
-def lineseg_dist(p, a, b):
-    # normalized tangent vector
-    d = np.divide(b - a, np.linalg.norm(b - a))
 
-    # signed parallel distance components
-    s = np.dot(a - p, d)
-    t = np.dot(p - b, d)
-
-    # clamped parallel distance
-    h = np.maximum.reduce([s, t, np.zeros(s.shape)])
-
-    # perpendicular distance component
-    c = np.cross(p - a, d)
-
-    return np.hypot(h, np.linalg.norm(c))
-
-def lineseg_dist_2(rs, p, q):
-    x = p-q
-    return np.linalg.norm(
-        np.outer(np.dot(rs-q, x)/np.dot(x, x), x)+q-rs,
-        axis=1)
-
-def get_joints_visibility(joints, vertices, visibilities, camera):
-    camera = np.array(camera)
-    vis = np.ones((joints.shape[0]))
+def get_joints_vertices(joints, vertices, joints_range=None):
     idxs = []
 
     for ji, j in enumerate(joints):
-        print("\n==========\n{:s}".format(list(COCO_JOINTS.keys())[ji]))
-        
-        dists_to_line = lineseg_dist_2(vertices, j, camera)
-        # print(j, camera)
-        print("Min and max distances", np.min(dists_to_line), np.max(dists_to_line))
         dist_to_vs = np.linalg.norm(vertices - j, axis=1)
-        # criterion = 5*dists_to_line + dist_to_vs
-        criterion = dist_to_vs
-        min_idxs = np.argsort(criterion)
-        tst = np.where(criterion < 0.1)[0]
-        # v_idx = np.argmin(criterion)
-        v_idx = min_idxs[:80]
-        # v_idx = tst
+        sort_min_idxs = np.argsort(dist_to_vs)
+        rng = joints_range[ji] if joints_range is not None else 100
+        v_idx = sort_min_idxs[:rng]
         idxs.append(v_idx)
-        print("Num nodes smaller than thr", v_idx.shape)
-        vis[ji] = np.any(visibilities[v_idx])
+        
+    return idxs
 
-    return vis.astype(bool), idxs
+
+def get_joints_visibilities(joint_vertices, visibilities):
+    n_joints = len(joint_vertices)
+    vis = np.zeros((n_joints))
+    for ji in range(n_joints):
+        vis[ji] = np.any(visibilities[joint_vertices[ji]])
+    return vis.astype(bool)
 
 
 def generate_color(alpha=1.0):
@@ -260,6 +233,7 @@ def generate_color(alpha=1.0):
     col = np.concatenate([col, np.ones(1)*alpha], axis=0)
 
     return col
+
 
 def main(model_folder,
          model_type='smplx',
@@ -322,23 +296,17 @@ def main(model_folder,
                         return_verts=True, body_pose=body_pose)
             vertices = output.vertices.detach().cpu().numpy().squeeze()
             joints = output.joints.detach().cpu().numpy().squeeze()
-            coco_joints = joints[[v for _, v in COCO_JOINTS.items()], :]
+            coco_joints = joints[[v["idx"] for _, v in COCO_JOINTS.items()], :]
+            joints_range = np.array([v["range"] for _, v in COCO_JOINTS.items()])
 
             msh = Mesh(vertices, model.faces)
-
-            # print(dir(model))
-            # print(model.faces.shape)
-            # print("Joints", joints.shape)
-
-            # print('Vertices shape =', vertices.shape)
-            # print('Joints shape =', joints.shape)
 
             if plotting_module == 'pyrender':
                 import pyrender
                 import trimesh
                 
                 # Default (= skin) color
-                vertex_colors = np.ones([vertices.shape[0], 4]) * [0.28, 0.66, 1.0, 1.0]
+                vertex_colors = np.ones([vertices.shape[0], 4]) * [1.0, 0.66, 0.28, 1.0]
    
                 if np.random.rand(1)[0] < 0.5:
                     BOTTOM = PANTS_PARTS
@@ -356,11 +324,7 @@ def main(model_folder,
                     for body_part in seg:
                         vertex_colors[seg_dict[body_part], :] = seg_col
 
-                _, idxs = get_joints_visibility(coco_joints, vertices, np.ones((vertices.shape[0])), np.array([0, 0, 0]))
-
-                for j_idxs in idxs:
-                    vertex_colors[j_idxs, :] = (1, 0, 0, 1)
-
+                joints_vertices = get_joints_vertices(coco_joints, vertices, joints_range)
 
                 tri_mesh = trimesh.Trimesh(vertices, model.faces,
                                         vertex_colors=vertex_colors)
@@ -371,19 +335,9 @@ def main(model_folder,
                 scene.add(mesh)
 
                 light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
-                diag = np.diag([2, 2, 2, 1])
-                scene.add(light, pose=diag)
-                diag = np.diag([-2, -1, -2, 1])
-                scene.add(light, pose=diag)
+                for _ in range(3):
+                    scene.add(light, pose=random_camera_pose(distance=5))
                 
-                # if plot_joints:
-                #     sm = trimesh.creation.uv_sphere(radius=0.005)
-                #     sm.visual.vertex_colors = [0.1, 0.1, 0.9, 1.0]
-                #     tfs = np.tile(np.eye(4), (len(joints), 1, 1))
-                #     tfs[:, :3, 3] = joints
-                #     joints_pcl = pyrender.Mesh.from_trimesh(sm, poses=tfs)
-                #     scene.add(joints_pcl)
-
                 if args is not None and args.show:
                     # render scene
                     for idx in range(num_views):    
@@ -393,7 +347,6 @@ def main(model_folder,
                 else:
                     camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
                     last_camera_node = None
-                    # mvs = MeshViewers(shape=(1, num_views))
                     for idx in range(num_views):    
                         if last_camera_node is not None:
                             scene.remove_node(last_camera_node)
@@ -406,8 +359,8 @@ def main(model_folder,
                         color, _ = r.render(scene)
                         color = color.astype(np.uint8)
 
-                        # save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, idx))
-                        # cv2.imwrite(save_path.format(idx), color)
+                        save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, idx))
+                        cv2.imwrite(save_path.format(idx), color)
                         
                         if plot_joints:
                             
@@ -417,15 +370,7 @@ def main(model_folder,
                                 omni_directional_camera = True
                             )
 
-                            # mvs[0][idx].set_static_meshes([msh.visibile_mesh(camera=cam)])
-
-                            joints_vis, idxs = get_joints_visibility(
-                                coco_joints,
-                                vertices,
-                                visibilities,
-                                cam
-                            )
-                            print(idxs)
+                            joints_vis = get_joints_visibilities(joints_vertices, visibilities)
 
                             K = camera.get_projection_matrix(1024, 1024)
                             v = coco_joints
@@ -440,13 +385,8 @@ def main(model_folder,
                             joints_vis = np.all(projected >= 0, axis=1) & joints_vis
                             joints_vis = np.all(projected < 1024, axis=1) & joints_vis
 
-                            # For now, ignore hips and shoulders
-                            # joints_vis[[5, 6, 11, 12]] = False
                             
                             for pi, pt in enumerate(projected):
-                                # if not joints_vis[pi]:
-                                #     continue
-
                                 marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
                                 thickness = 2 if joints_vis[pi] else 1
                                 color = cv2.drawMarker(
