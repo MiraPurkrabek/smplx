@@ -386,40 +386,41 @@ def main(model_folder,
                         last_camera_node = scene.add(camera, pose=T)
 
                         r = pyrender.OffscreenRenderer(1024, 1024)
-                        color, _ = r.render(scene)
-                        color = color.astype(np.uint8)
+                        rendered_img, _ = r.render(scene)
+                        rendered_img = rendered_img.astype(np.uint8)
 
-                        img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
-                        img_id = int(abs(hash(img_name)))
-                        save_path = osp.join(out_folder, img_name)
-                        cv2.imwrite(save_path.format(view_idx), color)
-                        
+                        # Name file differently to avoid confusion
                         if plot_joints:
-                            
-                            cam = T[:3, -1].squeeze().tolist()
-                            visibilities = msh.vertex_visibility(
-                                camera = cam,
-                                omni_directional_camera = True
-                            )
+                            img_name = "sampled_pose_{:02d}_view_{:02d}_GT.jpg".format(pose_i, view_idx)
+                        else:
+                            img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
+                        img_id = int(abs(hash(img_name)))
+                        
+                        cam = T[:3, -1].squeeze().tolist()
+                        visibilities = msh.vertex_visibility(
+                            camera = cam,
+                            omni_directional_camera = True
+                        )
 
-                            K = camera.get_projection_matrix(1024, 1024)
-                            
-                            joints_2d = project_to_2d(coco_joints, K, T)
-                            vertices_2d = project_to_2d(vertices, K, T)
+                        K = camera.get_projection_matrix(1024, 1024)
+                        
+                        joints_2d = project_to_2d(coco_joints, K, T)
+                        vertices_2d = project_to_2d(vertices, K, T)
 
-                            in_image = np.all(vertices_2d >= 0, axis=1)
-                            in_image = np.all(vertices_2d < 1024, axis=1) & in_image
-                            vertices_2d = vertices_2d[in_image, :]
+                        in_image = np.all(vertices_2d >= 0, axis=1)
+                        in_image = np.all(vertices_2d < 1024, axis=1) & in_image
+                        vertices_2d = vertices_2d[in_image, :]
 
-                            joints_vis = get_joints_visibilities(joints_vertices, visibilities)
-                            joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
-                            joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
+                        joints_vis = get_joints_visibilities(joints_vertices, visibilities)
+                        joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
+                        joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
 
+                        if plot_joints:
                             for pi, pt in enumerate(joints_2d):
                                 marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
                                 thickness = 2 if joints_vis[pi] else 1
-                                color = cv2.drawMarker(
-                                    color,
+                                rendered_img = cv2.drawMarker(
+                                    rendered_img,
                                     tuple(pt.tolist()),
                                     color=marker_color,
                                     markerType=cv2.MARKER_CROSS,
@@ -433,8 +434,8 @@ def main(model_folder,
                                 
                                 start = joints_2d[b[0], :]
                                 end = joints_2d[b[1], :]
-                                color = cv2.line(
-                                    color,
+                                rendered_img = cv2.line(
+                                    rendered_img,
                                     start,
                                     end,
                                     thickness=1,
@@ -455,13 +456,14 @@ def main(model_folder,
                                 np.max(vertices_2d[:, 1]),
                             ])
 
-                            color = cv2.rectangle(
-                                color,
-                                (int(bbox[0]), int(bbox[1])),
-                                (int(bbox[2]), int(bbox[3])),
-                                color=(0, 255, 0),
-                                thickness=1
-                            )
+                            if plot_joints:
+                                rendered_img = cv2.rectangle(
+                                    rendered_img,
+                                    (int(bbox[0]), int(bbox[1])),
+                                    (int(bbox[2]), int(bbox[3])),
+                                    color=(0, 255, 0),
+                                    thickness=1
+                                )
 
                             gt_coco_dict["images"].append({
                                 "file_name": img_name,
@@ -479,8 +481,8 @@ def main(model_folder,
                                 "id": int(abs(hash(img_name + str(view_idx))))
                             })
 
-                            save_path = osp.join(out_folder, "sampled_pose_{:02d}_view_{:02d}_gt.jpg".format(pose_i, view_idx))
-                            cv2.imwrite(save_path.format(view_idx), color)
+                        save_path = osp.join(out_folder, img_name)
+                        cv2.imwrite(save_path.format(view_idx), rendered_img)
 
                         progress_bar.update()
 
@@ -524,10 +526,9 @@ def main(model_folder,
             else:
                 raise ValueError('Unknown plotting_module: {}'.format(plotting_module))
         
-        if plot_joints:
-            gt_filename = os.path.join(out_folder, "coco_annotations.json")
-            with open(gt_filename, "w") as fp:
-                json.dump(gt_coco_dict, fp, indent=2)
+        gt_filename = os.path.join(out_folder, "coco_annotations.json")
+        with open(gt_filename, "w") as fp:
+            json.dump(gt_coco_dict, fp, indent=2)
 
 
 if __name__ == '__main__':
