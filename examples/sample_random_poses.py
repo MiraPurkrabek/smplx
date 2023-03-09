@@ -14,6 +14,7 @@
 #
 # Contact: ps-license@tuebingen.mpg.de
 
+import math
 import os.path as osp
 import os
 import shutil
@@ -272,6 +273,8 @@ def draw_pose(img, kpts, joints_vis, draw_style="custom"):
 
         skeleton = OPENPOSE_SKELETON
 
+    print(kpts.shape, len(skeleton))
+
     for pi, pt in enumerate(kpts):
         
         if draw_style == "openpose":
@@ -295,18 +298,19 @@ def draw_pose(img, kpts, joints_vis, draw_style="custom"):
                 thickness=thickness
             )
 
-    for bone in skeleton:
+    for bi, bone in enumerate(skeleton):
         b = np.array(bone) - 1 # COCO_SKELETON is 1-indexed
-        start = kpts[bone[0], :]
-        end = kpts[bone[1], :]
+        start = kpts[b[0], :]
+        end = kpts[b[1], :]
         if draw_style == "openpose":
+            stickwidth = 4
             current_img = img.copy()
             mX = np.mean(np.array([start[0], end[0]]))
             mY = np.mean(np.array([start[1], end[1]]))
             length = ((start[0] - end[0]) ** 2 + (start[1] - end[1]) ** 2) ** 0.5
             angle = math.degrees(math.atan2(start[0] - end[0], start[1] - end[1]))
             polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
-            cv2.fillConvexPoly(current_img, polygon, OPENPOSE_COLORS[i])
+            cv2.fillConvexPoly(current_img, polygon, OPENPOSE_COLORS[bi])
             img = cv2.addWeighted(img, 0.4, current_img, 0.6, 0)
 
         else:
