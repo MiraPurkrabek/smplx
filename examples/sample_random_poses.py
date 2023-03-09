@@ -348,7 +348,7 @@ def main(args):
     
     shutil.rmtree(args.out_folder, ignore_errors=True)
     os.makedirs(args.out_folder, exist_ok=True)
-    
+
     with open("models/smplx/SMPLX_segmentation.json", "r") as fp:
         seg_dict = json.load(fp)
 
@@ -485,6 +485,37 @@ def main(args):
                     in_image = np.all(vertices_2d < 1024, axis=1) & in_image
                     vertices_2d = vertices_2d[in_image, :]
                     
+
+                    joints_vis = get_joints_visibilities(joints_vertices, visibilities)
+                    joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
+                    joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
+
+                    keypoints = np.concatenate([
+                        joints_2d,
+                        2*joints_vis.astype(np.float32).reshape((-1, 1))
+                    ], axis=1)
+
+                    keypoints[~ joints_vis, :] = 0
+
+                    bbox_xy = np.array([
+                        np.min(vertices_2d[:, 0]),
+                        np.min(vertices_2d[:, 1]),
+                        np.max(vertices_2d[:, 0]),
+                        np.max(vertices_2d[:, 1]),
+                    ], dtype=np.float32)
+                    bbox_wh = np.array([
+                        bbox_xy[0], bbox_xy[1],
+                        bbox_xy[2] - bbox_xy[0],
+                        bbox_xy[3] - bbox_xy[1],
+                    ], dtype=np.float32)
+                    pad = 0.1 * bbox_wh[2:]
+                    crop_bbox = np.array([
+                        int(max(0, bbox_xy[1] - pad[1])),
+                        int(max(0, bbox_xy[0] - pad[0])),
+                        int(min(1024, bbox_xy[3] + pad[1])),
+                        int(min(1024, bbox_xy[2] + pad[0])),
+                    ], dtype=np.int32)
+
                     if "depth" in args.gt_type:
                         cam_up = camera_rotation @ np.array([0, 1, 0])
                         params = [{
@@ -507,22 +538,19 @@ def main(args):
                         depthmap /= np.max(depthmap)
                         depthmap = 1 - depthmap
                         depthmap *= 255
+                        if args.crop:
+                            depthmap = depthmap[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
                         cv2.imwrite(
                             osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
                             depthmap.astype(np.uint8)
                         )
-
-                    joints_vis = get_joints_visibilities(joints_vertices, visibilities)
-                    joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
-                    joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
-
-                    if args.plot_gt:
-                        rendered_img = draw_pose(rendered_img, joints_2d, joints_vis)
-
                     if "openpose" in args.gt_type:
                         posemap = np.zeros((1024, 1024, 3), dtype=np.uint8)
                         posemap_all = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose")
                         posemap_vis = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose_vis")
+                        if args.crop:
+                            posemap_all = posemap_all[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
+                            posemap_vis = posemap_vis[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
                         cv2.imwrite(
                             osp.join(args.out_folder, "{:d}_openpose_all.jpg".format(img_id)),
                             posemap_all.astype(np.uint8)
@@ -532,28 +560,8 @@ def main(args):
                             posemap_vis.astype(np.uint8)
                         )
 
-                    keypoints = np.concatenate([
-                        joints_2d,
-                        2*joints_vis.astype(np.float32).reshape((-1, 1))
-                    ], axis=1)
-
-                    keypoints[~ joints_vis, :] = 0
-
-
-                    bbox_xy = np.array([
-                        np.min(vertices_2d[:, 0]),
-                        np.min(vertices_2d[:, 1]),
-                        np.max(vertices_2d[:, 0]),
-                        np.max(vertices_2d[:, 1]),
-                    ], dtype=np.float32)
-                    bbox_wh = np.array([
-                        bbox_xy[0], bbox_xy[1],
-                        bbox_xy[2] - bbox_xy[0],
-                        bbox_xy[3] - bbox_xy[1],
-                    ], dtype=np.float32)
-
-
                     if args.plot_gt:
+                        rendered_img = draw_pose(rendered_img, joints_2d, joints_vis)
                         rendered_img = cv2.rectangle(
                             rendered_img,
                             (int(bbox_xy[0]), int(bbox_xy[1])),
@@ -562,10 +570,27 @@ def main(args):
                             thickness=1
                         )
 
+                    annot_height = 1024
+                    annot_width = 1024
+
+                    if args.crop:
+                        # Recompute annotations
+                        annot_height = int(crop_bbox[2] - crop_bbox[0])
+                        annot_width = int(crop_bbox[3] - crop_bbox[1])
+                        keypoints[joints_vis, 0] -= crop_bbox[1]
+                        keypoints[joints_vis, 1] -= crop_bbox[0]
+                        bbox_wh[:2] -= crop_bbox[:2]
+
+                        # Crop the image
+                        rendered_img = rendered_img[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
+                       
+                    save_path = osp.join(args.out_folder, img_name)
+                    cv2.imwrite(save_path, rendered_img)
+
                     gt_coco_dict["images"].append({
                         "file_name": img_name,
-                        "height": 1024,
-                        "width": 1024,
+                        "height": annot_height,
+                        "width": annot_width,
                         "id": img_id,
                     })
                     gt_coco_dict["annotations"].append({
@@ -578,9 +603,6 @@ def main(args):
                         "category_id": 1,
                         "id": int(abs(hash(img_name + str(view_idx))))
                     })
-
-                    save_path = osp.join(args.out_folder, img_name)
-                    cv2.imwrite(save_path, rendered_img)
 
                     progress_bar.update()
         
@@ -638,12 +660,19 @@ if __name__ == '__main__':
     parser.add_argument('--show',
                         action="store_true", default=False,
                         help='If True, will render and show results instead of saving images')
+    parser.add_argument("--gt-type", nargs="+",)
+    parser.add_argument('--crop',
+                        action="store_true", default=False,
+                        help='If True, will crop the image by the computed bbox (slightly larger)')
     # parser.add_argument('--gt-type', default='NONE', type=str,
     #                     choices=['NONE', 'depth', 'openpose', 'cocopose'],
     #                     help='The type of model to load')
-    parser.add_argument("--gt-type", nargs="+",)
 
     args = parser.parse_args()
+
+    if args.gt_type is None:
+        args.gt_type = []
+
     args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))
 
     main(args)
