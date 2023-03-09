@@ -370,6 +370,8 @@ def main(args):
                     else:
                         img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
                     img_id = int(abs(hash(img_name)))
+
+                    img_name = "{:d}.jpg".format(img_id)
                     
                     cam = T[:3, -1].squeeze().tolist()
                     visibilities = msh.vertex_visibility(
@@ -417,44 +419,51 @@ def main(args):
                                 color=(0, 0, 255)
                             )
 
-                        keypoints = np.concatenate([
-                            joints_2d,
-                            2*joints_vis.astype(np.float32).reshape((-1, 1))
-                        ], axis=1)
+                    keypoints = np.concatenate([
+                        joints_2d,
+                        2*joints_vis.astype(np.float32).reshape((-1, 1))
+                    ], axis=1)
 
-                        keypoints[~ joints_vis, :] = 0
+                    keypoints[~ joints_vis, :] = 0
 
-                        bbox = np.array([
-                            np.min(vertices_2d[:, 0]),
-                            np.min(vertices_2d[:, 1]),
-                            np.max(vertices_2d[:, 0]),
-                            np.max(vertices_2d[:, 1]),
-                        ])
+                    bbox_xy = np.array([
+                        np.min(vertices_2d[:, 0]),
+                        np.min(vertices_2d[:, 1]),
+                        np.max(vertices_2d[:, 0]),
+                        np.max(vertices_2d[:, 1]),
+                    ], dtype=np.float32)
+                    bbox_wh = np.array([
+                        bbox_xy[0], bbox_xy[1],
+                        bbox_xy[2] - bbox_xy[0],
+                        bbox_xy[3] - bbox_xy[1],
+                    ], dtype=np.float32)
 
-                        if args.plot_gt:
-                            rendered_img = cv2.rectangle(
-                                rendered_img,
-                                (int(bbox[0]), int(bbox[1])),
-                                (int(bbox[2]), int(bbox[3])),
-                                color=(0, 255, 0),
-                                thickness=1
-                            )
 
-                        gt_coco_dict["images"].append({
-                            "file_name": img_name,
-                            "height": 1024,
-                            "width": 1024,
-                            "id": img_id,
-                        })
-                        gt_coco_dict["annotations"].append({
-                            "num_keypoints": int(np.sum(joints_vis)),
-                            "iscrowd": 0,
-                            "keypoints": keypoints.flatten().tolist(),
-                            "image_id": img_id,
-                            "bbox": bbox.flatten().tolist(),
-                            "category_id": 1,
-                            "id": int(abs(hash(img_name + str(view_idx))))
-                        })
+                    if args.plot_gt:
+                        rendered_img = cv2.rectangle(
+                            rendered_img,
+                            (int(bbox_xy[0]), int(bbox_xy[1])),
+                            (int(bbox_xy[2]), int(bbox_xy[3])),
+                            color=(0, 255, 0),
+                            thickness=1
+                        )
+
+                    gt_coco_dict["images"].append({
+                        "file_name": img_name,
+                        "height": 1024,
+                        "width": 1024,
+                        "id": img_id,
+                    })
+                    gt_coco_dict["annotations"].append({
+                        "num_keypoints": int(np.sum(joints_vis)),
+                        "iscrowd": 0,
+                        "area": float(bbox_wh[2] * bbox_wh[3]),
+                        "keypoints": keypoints.flatten().tolist(),
+                        "image_id": img_id,
+                        "bbox": bbox_wh.flatten().tolist(),
+                        "category_id": 1,
+                        "id": int(abs(hash(img_name + str(view_idx))))
+                    })
 
                     save_path = osp.join(args.out_folder, img_name)
                     cv2.imwrite(save_path.format(view_idx), rendered_img)
@@ -515,6 +524,9 @@ if __name__ == '__main__':
     parser.add_argument('--show',
                         action="store_true", default=False,
                         help='If True, will render and show results instead of saving images')
+    parser.add_argument('--depth',
+                        action="store_true", default=False,
+                        help='If True, will compute and save depth of the image')
 
     args = parser.parse_args()
     args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))
