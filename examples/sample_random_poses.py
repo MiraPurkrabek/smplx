@@ -285,7 +285,7 @@ def draw_pose(img, kpts, joints_vis, draw_style="custom"):
         else:
             marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
             thickness = 2 if joints_vis[pi] else 1
-            marker_type = cv2.MARKER_CROS
+            marker_type = cv2.MARKER_CROSS
         
             img = cv2.drawMarker(
                 img,
