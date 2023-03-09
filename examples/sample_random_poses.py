@@ -30,7 +30,7 @@ from tqdm import tqdm
 import json
 
 import smplx
-from smplx.joint_names import COCO_JOINTS, COCO_SKELETON
+from smplx.joint_names import COCO_JOINTS, COCO_SKELETON, OPENPOSE_SKELETON, OPENPOSE_COLORS
 
 from psbody.mesh import Mesh, MeshViewers
 
@@ -253,6 +253,77 @@ def project_to_2d(pts, K, T):
     return points_2d
 
 
+def draw_pose(img, kpts, joints_vis, draw_style="custom"):
+
+    assert draw_style in [
+        "custom",
+        "openpose",
+    ]
+
+    skeleton = COCO_SKELETON
+
+    if draw_style == "openpose":
+        # Reorder kpts to OpenPose order
+        kpts = kpts.copy()
+        kpts = kpts[[0, 0, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3], :]
+        
+        # Compute pelvis as mean of shoulders
+        kpts[1, :] = np.mean(kpts[[2, 5], :], axis=1)
+
+        skeleton = OPENPOSE_SKELETON
+
+    for pi, pt in enumerate(kpts):
+        
+        if draw_style == "openpose":
+            img = cv2.circle(
+                img,
+                tuple(pt.tolist()),
+                radius=4,
+                color=OPENPOSE_COLORS[pi],
+                thickness=-1
+            )
+        else:
+            marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
+            thickness = 2 if joints_vis[pi] else 1
+            marker_type = cv2.MARKER_CROS
+        
+            img = cv2.drawMarker(
+                img,
+                tuple(pt.tolist()),
+                color=marker_color,
+                markerType=marker_type,
+                thickness=thickness
+            )
+
+    for bone in skeleton:
+        b = np.array(bone) - 1 # COCO_SKELETON is 1-indexed
+        start = kpts[bone[0], :]
+        end = kpts[bone[1], :]
+        if draw_style == "openpose":
+            current_img = img.copy()
+            mX = np.mean(np.array([start[0], end[0]]))
+            mY = np.mean(np.array([start[1], end[1]]))
+            length = ((start[0] - end[0]) ** 2 + (start[1] - end[1]) ** 2) ** 0.5
+            angle = math.degrees(math.atan2(start[0] - end[0], start[1] - end[1]))
+            polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
+            cv2.fillConvexPoly(current_img, polygon, OPENPOSE_COLORS[i])
+            img = cv2.addWeighted(img, 0.4, current_img, 0.6, 0)
+
+        else:
+            if not (joints_vis[b[0]] and joints_vis[b[1]]):
+                continue
+            
+            img = cv2.line(
+                img,
+                start,
+                end,
+                thickness=1,
+                color=(0, 0, 255)
+            )
+
+    return img
+
+
 def main(args):
     
     shutil.rmtree(args.out_folder, ignore_errors=True)
@@ -394,7 +465,7 @@ def main(args):
                     in_image = np.all(vertices_2d < 1024, axis=1) & in_image
                     vertices_2d = vertices_2d[in_image, :]
                     
-                    if args.depth:
+                    if args.gt_type == "depth":
                         cam_up = camera_rotation @ np.array([0, 1, 0])
                         params = [{
                             'cam_pos': camera_position,
@@ -421,37 +492,20 @@ def main(args):
                             depthmap.astype(np.uint8)
                         )
 
-
                     joints_vis = get_joints_visibilities(joints_vertices, visibilities)
                     joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
                     joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
 
                     if args.plot_gt:
-                        for pi, pt in enumerate(joints_2d):
-                            marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
-                            thickness = 2 if joints_vis[pi] else 1
-                            rendered_img = cv2.drawMarker(
-                                rendered_img,
-                                tuple(pt.tolist()),
-                                color=marker_color,
-                                markerType=cv2.MARKER_CROSS,
-                                thickness=thickness
-                            )
+                        rendered_img = draw_pose(rendered_img, joints_2d, joints_vis)
 
-                        for bone in COCO_SKELETON:
-                            b = np.array(bone) - 1 # COCO_SKELETON is 1-indexed
-                            if not (joints_vis[b[0]] and joints_vis[b[1]]):
-                                continue
-                            
-                            start = joints_2d[b[0], :]
-                            end = joints_2d[b[1], :]
-                            rendered_img = cv2.line(
-                                rendered_img,
-                                start,
-                                end,
-                                thickness=1,
-                                color=(0, 0, 255)
-                            )
+                    if args.gt_type == "openpose":
+                        posemap = np.zeros((1024, 1024, 3), dtype=np.uint8)
+                        posemap = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose")
+                        cv2.imwrite(
+                            osp.join(args.out_folder, "{:d}_openpose.jpg".format(img_id)),
+                            posemap.astype(np.uint8)
+                        )
 
                     keypoints = np.concatenate([
                         joints_2d,
@@ -459,6 +513,7 @@ def main(args):
                     ], axis=1)
 
                     keypoints[~ joints_vis, :] = 0
+
 
                     bbox_xy = np.array([
                         np.min(vertices_2d[:, 0]),
@@ -558,9 +613,9 @@ if __name__ == '__main__':
     parser.add_argument('--show',
                         action="store_true", default=False,
                         help='If True, will render and show results instead of saving images')
-    parser.add_argument('--depth',
-                        action="store_true", default=False,
-                        help='If True, will compute and save depth of the image')
+    parser.add_argument('--gt-type', default='NONE', type=str,
+                        choices=['NONE', 'depth', 'openpose', 'cocopose'],
+                        help='The type of model to load')
 
     args = parser.parse_args()
     args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))

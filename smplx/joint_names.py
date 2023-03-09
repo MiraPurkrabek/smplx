@@ -166,23 +166,23 @@ JOINT_NAMES = [
 
 
 COCO_JOINTS = {
-    "nose": {"idx": 75-20, "range": 300},
-    "left eye": {"idx": 77-20, "range": 700},
-    "right eye": {"idx": 76-20, "range": 700},
-    "left ear": {"idx": 79-20, "range": 500},
-    "right ear": {"idx": 78-20, "range": 500},
-    "left shoulder": {"idx": 36-20, "range": 200},
-    'right_shoulder': {"idx": 37-20, "range": 200},
-    'left_elbow': {"idx": 38-20, "range": 150},
-    'right_elbow': {"idx": 39-20, "range": 150},
-    'left_wrist': {"idx": 40-20, "range": 100},
-    'right_wrist': {"idx": 41-20, "range": 100},
-    'left_hip': {"idx": 21-20, "range": 200},
-    'right_hip': {"idx": 22-20, "range": 200},
-    'left_knee': {"idx": 24-20, "range": 100},
-    'right_knee': {"idx": 25-20, "range": 100},
-    'left_ankle': {"idx": 27-20, "range": 50},
-    'right_ankle': {"idx": 28-20, "range": 50},
+    "nose": {"idx": 75-20, "range": 300},               # 0
+    "left eye": {"idx": 77-20, "range": 700},           # 1
+    "right eye": {"idx": 76-20, "range": 700},          # 2
+    "left ear": {"idx": 79-20, "range": 500},           # 3
+    "right ear": {"idx": 78-20, "range": 500},          # 4
+    "left shoulder": {"idx": 36-20, "range": 200},      # 5
+    'right_shoulder': {"idx": 37-20, "range": 200},     # 6
+    'left_elbow': {"idx": 38-20, "range": 150},         # 7
+    'right_elbow': {"idx": 39-20, "range": 150},        # 8
+    'left_wrist': {"idx": 40-20, "range": 100},         # 9
+    'right_wrist': {"idx": 41-20, "range": 100},        # 10
+    'left_hip': {"idx": 21-20, "range": 200},           # 11
+    'right_hip': {"idx": 22-20, "range": 200},          # 12
+    'left_knee': {"idx": 24-20, "range": 100},          # 13
+    'right_knee': {"idx": 25-20, "range": 100},         # 14
+    'left_ankle': {"idx": 27-20, "range": 50},          # 15
+    'right_ankle': {"idx": 28-20, "range": 50},         # 16
 }
 
 COCO_SKELETON = [
@@ -207,6 +207,13 @@ COCO_SKELETON = [
         [ 5,  7],
 ]
 
+OPENPOSE_SKELETON = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], \
+               [10, 11], [2, 12], [12, 13], [13, 14], [2, 1], [1, 15], [15, 17], \
+               [1, 16], [16, 18], [3, 17], [6, 18]]
+
+OPENPOSE_COLORS = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0], [85, 255, 0], [0, 255, 0], \
+              [0, 255, 85], [0, 255, 170], [0, 255, 255], [0, 170, 255], [0, 85, 255], [0, 0, 255], [85, 0, 255], \
+              [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]]
 
 SMPLH_JOINT_NAMES = [
     "pelvis",
