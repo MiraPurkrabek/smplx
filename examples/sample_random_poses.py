@@ -34,6 +34,8 @@ from smplx.joint_names import COCO_JOINTS, COCO_SKELETON
 
 from psbody.mesh import Mesh, MeshViewers
 
+import mesh_to_depth as m2d
+
 TSHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm"]
 SHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm", "leftForeArm", "rightForeArm"]
 SHORTS_PARTS = ["rightUpLeg", "leftUpLeg"]
@@ -350,15 +352,16 @@ def main(args):
                 pyrender.Viewer(scene, use_raymond_lighting=True)
             
             else:
-                camera = pyrender.PerspectiveCamera( yfov=np.pi /2, aspectRatio=1)
+                fov = np.pi/2
+                camera = pyrender.PerspectiveCamera( yfov=fov, aspectRatio=1)
                 last_camera_node = None
                 for view_idx in range(args.num_views):    
                     if last_camera_node is not None:
                         scene.remove_node(last_camera_node)
                     
-                    T = random_camera_pose(distance=args.camera_distance)
+                    cam_pose = random_camera_pose(distance=args.camera_distance)
 
-                    last_camera_node = scene.add(camera, pose=T)
+                    last_camera_node = scene.add(camera, pose=cam_pose)
 
                     r = pyrender.OffscreenRenderer(1024, 1024)
                     rendered_img, _ = r.render(scene)
@@ -371,22 +374,53 @@ def main(args):
                         img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
                     img_id = int(abs(hash(img_name)))
 
+                    # For COCO compatibility
                     img_name = "{:d}.jpg".format(img_id)
                     
-                    cam = T[:3, -1].squeeze().tolist()
+                    camera_position = cam_pose[:3, -1].squeeze().tolist()
+                    camera_rotation = cam_pose[:3, :3].squeeze()
+
                     visibilities = msh.vertex_visibility(
-                        camera = cam,
+                        camera = camera_position,
                         omni_directional_camera = True
                     )
 
                     K = camera.get_projection_matrix(1024, 1024)
                     
-                    joints_2d = project_to_2d(coco_joints, K, T)
-                    vertices_2d = project_to_2d(vertices, K, T)
+                    joints_2d = project_to_2d(coco_joints, K, cam_pose)
+                    vertices_2d = project_to_2d(vertices, K, cam_pose)
 
                     in_image = np.all(vertices_2d >= 0, axis=1)
                     in_image = np.all(vertices_2d < 1024, axis=1) & in_image
                     vertices_2d = vertices_2d[in_image, :]
+                    
+                    if args.depth:
+                        cam_up = camera_rotation @ np.array([0, 1, 0])
+                        params = [{
+                            'cam_pos': camera_position,
+                            'cam_lookat': [0, 0, 0],
+                            'cam_up': cam_up,
+                            'x_fov': fov,  # End-to-end field of view in radians
+                            'near': 0.01, 'far': 10,
+                            'height': 1024, 'width': 1024,
+                            'is_depth': True,  # If false, output a ray displacement map, i.e. from the mesh surface to the camera center.
+                        }]
+                        depthmap = m2d.mesh2depth(
+                            vertices.copy().astype(np.float32),
+                            model.faces.astype(np.uint32),
+                            params,
+                            empty_pixel_value=-1,
+                        )[0]
+                        depthmap[depthmap < 0] =  1.1 * np.max(depthmap)
+                        depthmap = depthmap - np.min(depthmap)
+                        depthmap /= np.max(depthmap)
+                        depthmap = 1 - depthmap
+                        depthmap *= 255
+                        cv2.imwrite(
+                            osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
+                            depthmap.astype(np.uint8)
+                        )
+
 
                     joints_vis = get_joints_visibilities(joints_vertices, visibilities)
                     joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
@@ -466,7 +500,7 @@ def main(args):
                     })
 
                     save_path = osp.join(args.out_folder, img_name)
-                    cv2.imwrite(save_path.format(view_idx), rendered_img)
+                    cv2.imwrite(save_path, rendered_img)
 
                     progress_bar.update()
         
