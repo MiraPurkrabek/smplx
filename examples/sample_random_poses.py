@@ -255,25 +255,28 @@ def project_to_2d(pts, K, T):
 
 
 def draw_pose(img, kpts, joints_vis, draw_style="custom"):
+    img = img.copy()
 
     assert draw_style in [
         "custom",
         "openpose",
+        "openpose_vis",
     ]
 
+    joints_vis = joints_vis.astype(bool)
     skeleton = COCO_SKELETON
 
-    if draw_style == "openpose":
+    if draw_style.startswith("openpose"):
         # Reorder kpts to OpenPose order
         kpts = kpts.copy()
         kpts = kpts[[0, 0, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3], :]
+        joints_vis = joints_vis[[0, 0, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3]]
         
         # Compute pelvis as mean of shoulders
         kpts[1, :] = np.mean(kpts[[2, 5], :], axis=1)
+        joints_vis[1] = np.all(joints_vis[[2, 5]])
 
         skeleton = OPENPOSE_SKELETON
-
-    print(kpts.shape, len(skeleton))
 
     for pi, pt in enumerate(kpts):
         
@@ -285,6 +288,15 @@ def draw_pose(img, kpts, joints_vis, draw_style="custom"):
                 color=OPENPOSE_COLORS[pi],
                 thickness=-1
             )
+        elif draw_style == "openpose_vis":
+            if joints_vis[pi]:
+                img = cv2.circle(
+                    img,
+                    tuple(pt.tolist()),
+                    radius=4,
+                    color=OPENPOSE_COLORS[pi],
+                    thickness=-1
+                )
         else:
             marker_color = (0, 0, 255) if joints_vis[pi] else (40, 40, 40)
             thickness = 2 if joints_vis[pi] else 1
@@ -302,14 +314,18 @@ def draw_pose(img, kpts, joints_vis, draw_style="custom"):
         b = np.array(bone) - 1 # COCO_SKELETON is 1-indexed
         start = kpts[b[0], :]
         end = kpts[b[1], :]
-        if draw_style == "openpose":
+        if draw_style.startswith("openpose"):
+            
+            if draw_style == "openpose_vis" and not (joints_vis[b[0]] and joints_vis[b[1]]):
+                continue
+            
             stickwidth = 4
             current_img = img.copy()
             mX = np.mean(np.array([start[0], end[0]]))
             mY = np.mean(np.array([start[1], end[1]]))
             length = ((start[0] - end[0]) ** 2 + (start[1] - end[1]) ** 2) ** 0.5
-            angle = math.degrees(math.atan2(start[0] - end[0], start[1] - end[1]))
-            polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
+            angle = math.degrees(math.atan2(start[1] - end[1], start[0] - end[0]))
+            polygon = cv2.ellipse2Poly((int(mX), int(mY)), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
             cv2.fillConvexPoly(current_img, polygon, OPENPOSE_COLORS[bi])
             img = cv2.addWeighted(img, 0.4, current_img, 0.6, 0)
 
@@ -469,7 +485,7 @@ def main(args):
                     in_image = np.all(vertices_2d < 1024, axis=1) & in_image
                     vertices_2d = vertices_2d[in_image, :]
                     
-                    if args.gt_type == "depth":
+                    if "depth" in args.gt_type:
                         cam_up = camera_rotation @ np.array([0, 1, 0])
                         params = [{
                             'cam_pos': camera_position,
@@ -503,12 +519,17 @@ def main(args):
                     if args.plot_gt:
                         rendered_img = draw_pose(rendered_img, joints_2d, joints_vis)
 
-                    if args.gt_type == "openpose":
+                    if "openpose" in args.gt_type:
                         posemap = np.zeros((1024, 1024, 3), dtype=np.uint8)
-                        posemap = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose")
+                        posemap_all = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose")
+                        posemap_vis = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose_vis")
                         cv2.imwrite(
-                            osp.join(args.out_folder, "{:d}_openpose.jpg".format(img_id)),
-                            posemap.astype(np.uint8)
+                            osp.join(args.out_folder, "{:d}_openpose_all.jpg".format(img_id)),
+                            posemap_all.astype(np.uint8)
+                        )
+                        cv2.imwrite(
+                            osp.join(args.out_folder, "{:d}_openpose_vis.jpg".format(img_id)),
+                            posemap_vis.astype(np.uint8)
                         )
 
                     keypoints = np.concatenate([
@@ -617,9 +638,10 @@ if __name__ == '__main__':
     parser.add_argument('--show',
                         action="store_true", default=False,
                         help='If True, will render and show results instead of saving images')
-    parser.add_argument('--gt-type', default='NONE', type=str,
-                        choices=['NONE', 'depth', 'openpose', 'cocopose'],
-                        help='The type of model to load')
+    # parser.add_argument('--gt-type', default='NONE', type=str,
+    #                     choices=['NONE', 'depth', 'openpose', 'cocopose'],
+    #                     help='The type of model to load')
+    parser.add_argument("--gt-type", nargs="+",)
 
     args = parser.parse_args()
     args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))
