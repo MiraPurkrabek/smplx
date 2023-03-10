@@ -685,7 +685,8 @@ def main(args):
                         annot_width = int(crop_bbox[3] - crop_bbox[1])
                         keypoints[joints_vis, 0] -= crop_bbox[1]
                         keypoints[joints_vis, 1] -= crop_bbox[0]
-                        bbox_wh[:2] -= crop_bbox[:2]
+                        bbox_wh[0] -= crop_bbox[1]
+                        bbox_wh[1] -= crop_bbox[0]
 
                         # Crop the image
                         rendered_img = rendered_img[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
