@@ -187,31 +187,133 @@ def generate_pose(typical_pose=None, simplicity=5):
     return body_pose
 
 
-def random_camera_pose(distance=3):
-    t = np.random.rand(3) * 2 - 1
+def random_camera_pose(distance=3, view_preference=None, max_rotation=0):
+    
+    # Convert to radians
+    max_rotation = max_rotation / 180 * np.pi
+
+    noise_size = 0.3
+
+    # [ 0,  0,  1] - FRONT view
+    # [ 0,  0, -1] - BACK view (do not converge)
+    # [ 0,  1,  0] - TOP view
+    # [ 0, -1,  0] - BOTTOM view
+    # [ 1,  0,  0] - LEFT view
+    # [-1,  0,  0] - RIGHT view
+    
+    if view_preference is None:
+        t = np.random.rand(3) * 2 - 1
+        t_norm = t / np.linalg.norm(t)
+        t = t_norm * distance
+
+        a = [0, 0, 1]
+        b = t_norm
+        v = np.cross(a, b)
+        c = np.dot(a, b)
+        vx = np.array([
+            [0, -v[2], v[1]],
+            [v[2], 0, -v[0]],
+            [-v[1], v[0], 0],
+        ])
+
+        R = np.eye(3) + vx + np.dot(vx, vx) * 1/(1+c)
+        pose = np.array([
+            [R[0, 0], R[0, 1], R[0, 2], t[0]],
+            [R[1, 0], R[1, 1], R[1, 2], t[1]],
+            [R[2, 0], R[2, 1], R[2, 2], t[2]],
+            [      0,       0,       0,    1],
+        ])
+
+        return pose
+
+    elif view_preference.upper() == "PERIMETER":
+        t = np.random.rand(3) * 2 - 1
+        t[1] = 0
+        t[1] += (np.random.rand(1)*2-1)*noise_size
+        up = np.array([0, 1, 0], dtype=np.float32)
+    elif view_preference.upper() == "FRONT":
+        t = np.array([0, 0, 1], dtype=np.float32)
+        noise = (np.random.rand(3)*2-1) * noise_size
+        t += noise
+        up = np.array([0, 1, 0], dtype=np.float32)
+    elif view_preference.upper() == "BACK":
+        t = np.array([0, 0, -1], dtype=np.float32)
+        noise = (np.random.rand(3)*2-1) * noise_size
+        t += noise
+        up = np.array([0, 1, 0], dtype=np.float32)
+    elif view_preference.upper() == "TOP":
+        t = np.array([0, 1, 0], dtype=np.float32)
+        noise = (np.random.rand(3)*2-1) * noise_size
+        t += noise
+        up = np.array([0, 0, 1], dtype=np.float32)
+    elif view_preference.upper() == "BOTTOM":
+        t = np.array([0, -1, 0], dtype=np.float32)
+        noise = (np.random.rand(3)*2-1) * noise_size
+        t += noise
+        up = np.array([0, 0, 1], dtype=np.float32)
+    elif view_preference.upper() == "SIDE":
+        if np.random.rand(1) < 0.5:
+            t = np.array([1, 0, 0], dtype=np.float32)
+        else:
+            t = np.array([-1, 0, 0], dtype=np.float32)
+        noise = (np.random.rand(3)*2-1) * noise_size
+        t += noise
+        up = np.array([0, 1, 0], dtype=np.float32)
+    elif view_preference.upper() == "FRONTBACK":
+        if np.random.rand(1) < 0.5:
+            t = np.array([0, 0, 1], dtype=np.float32)
+        else:
+            t = np.array([0, 0, -1], dtype=np.float32)
+        noise = (np.random.rand(3)*2-1) * noise_size
+        t += noise
+        up = np.array([0, 1, 0], dtype=np.float32)
+    elif view_preference.upper() == "TOPBOTTOM":
+        if np.random.rand(1) < 0.5:
+            t = np.array([0, 1, 0], dtype=np.float32)
+        else:
+            t = np.array([0, -1, 0], dtype=np.float32)
+        noise = (np.random.rand(3)*2-1) * noise_size
+        t += noise
+        up = np.array([0, 1, 0], dtype=np.float32)
+    else:
+        raise ValueError("Unknown view preference")
 
     t_norm = t / np.linalg.norm(t)
-    # t = t_norm
     t = t_norm * distance
+    
+    up /= np.linalg.norm(up)
+    
+    center = np.array([0, 0, 0], dtype=np.float32)
+    eye = t
 
-    a = [0, 0, 1]
-    b = t_norm
-    v = np.cross(a, b)
-    c = np.dot(a, b)
-    vx = np.array([
-        [0, -v[2], v[1]],
-        [v[2], 0, -v[0]],
-        [-v[1], v[0], 0],
+    f = center - eye
+    f /= np.linalg.norm(f)
+
+    s = np.cross(f, up)
+    
+    u = np.cross(s/np.linalg.norm(s), f)
+
+    R = np.array([
+        [s[0], u[0], -f[0]],
+        [s[1], u[1], -f[1]],
+        [s[2], u[2], -f[2]],
     ])
 
-    R = np.eye(3) + vx + np.dot(vx, vx) * 1/(1+c)
-
+    theta = np.random.rand() * 2*max_rotation - max_rotation
+    rot_z = np.array([
+        [np.cos(theta), -np.sin(theta), 0],
+        [np.sin(theta),  np.cos(theta), 0],
+        [            0,              0, 1],
+    ])
+    R = R @ rot_z
+    
     pose = np.array([
-        [R[0, 0], R[0, 1], R[0, 2], t[0]],
-        [R[1, 0], R[1, 1], R[1, 2], t[1]],
-        [R[2, 0], R[2, 1], R[2, 2], t[2]],
-        [      0,       0,       0,    1],
+        [R[0, 0], R[0, 1], R[0, 2], eye[0]],
+        [R[1, 0], R[1, 1], R[1, 2], eye[1]],
+        [R[2, 0], R[2, 1], R[2, 2], eye[2]],
+        [      0,       0,       0,      1],
     ])
+
     return pose
 
 
@@ -450,7 +552,11 @@ def main(args):
                     if last_camera_node is not None:
                         scene.remove_node(last_camera_node)
                     
-                    cam_pose = random_camera_pose(distance=args.camera_distance)
+                    cam_pose = random_camera_pose(
+                        distance=args.camera_distance,
+                        view_preference=args.view_preference,
+                        max_rotation=args.max_rotation
+                    )
 
                     last_camera_node = scene.add(camera, pose=cam_pose)
 
@@ -648,11 +754,17 @@ if __name__ == '__main__':
                         help='Number of poses to sample.')
     parser.add_argument('--pose-simplicity', default=1, type=float,
                         dest='pose_simplicity',
-                        help='Measure of simplicty. The higher the simpler poses')
+                        help='Measure of pose simplicty. The higher number, the simpler poses')
+    parser.add_argument('--view-preference', default=None, type=str,
+                        dest='view_preference',
+                        help='Prefer some specific types of views.')
+    parser.add_argument('--max-rotation', default=0, type=int,
+                        dest='max_rotation',
+                        help='Maximal rotation of the image; in degrees')
     parser.add_argument('--camera-distance', default=2, type=float,
                         dest='camera_distance',
                         help='Distance of the camera from the mesh.')
-    parser.add_argument('--out-folder', default="sampled_poses",
+    parser.add_argument('--out-folder', default=None,
                         help='Output folder')
     parser.add_argument('--plot-gt',
                         action="store_true", default=False,
@@ -672,6 +784,16 @@ if __name__ == '__main__':
 
     if args.gt_type is None:
         args.gt_type = []
+
+    if args.out_folder is None:
+        args.out_folder = os.path.join(
+            "sampled_poses",
+            "simplicity_{:.1f}_view_{}_rotation_{:03d}".format(
+                args.pose_simplicity,
+                args.view_preference,
+                args.max_rotation,
+            )
+        )
 
     args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))
 
