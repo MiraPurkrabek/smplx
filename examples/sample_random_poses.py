@@ -187,7 +187,7 @@ def generate_pose(typical_pose=None, simplicity=5):
     return body_pose
 
 
-def random_camera_pose(distance=3, view_preference=None, max_rotation=0):
+def random_camera_pose(distance=3, view_preference=None, max_rotation=0, return_vectors=False):
     
     # Convert to radians
     max_rotation = max_rotation / 180 * np.pi
@@ -201,96 +201,102 @@ def random_camera_pose(distance=3, view_preference=None, max_rotation=0):
     # [ 1,  0,  0] - LEFT view
     # [-1,  0,  0] - RIGHT view
     
+    # if view_preference is None:
+    #     camera_pos = np.random.rand(3) * 2 - 1
+    #     camera_pos_norm = camera_pos / np.linalg.norm(camera_pos)
+    #     camera_pos = camera_pos_norm * distance
+
+    #     a = [0, 0, 1]
+    #     b = camera_pos_norm
+    #     v = np.cross(a, b)
+    #     c = np.dot(a, b)
+    #     vx = np.array([
+    #         [0, -v[2], v[1]],
+    #         [v[2], 0, -v[0]],
+    #         [-v[1], v[0], 0],
+    #     ])
+
+    #     R = np.eye(3) + vx + np.dot(vx, vx) * 1/(1+c)
+    #     pose = np.array([
+    #         [R[0, 0], R[0, 1], R[0, 2], camera_pos[0]],
+    #         [R[1, 0], R[1, 1], R[1, 2], camera_pos[1]],
+    #         [R[2, 0], R[2, 1], R[2, 2], camera_pos[2]],
+    #         [      0,       0,       0,    1],
+    #     ])
+
+    #     return pose
+
     if view_preference is None:
-        t = np.random.rand(3) * 2 - 1
-        t_norm = t / np.linalg.norm(t)
-        t = t_norm * distance
-
-        a = [0, 0, 1]
-        b = t_norm
-        v = np.cross(a, b)
-        c = np.dot(a, b)
-        vx = np.array([
-            [0, -v[2], v[1]],
-            [v[2], 0, -v[0]],
-            [-v[1], v[0], 0],
-        ])
-
-        R = np.eye(3) + vx + np.dot(vx, vx) * 1/(1+c)
-        pose = np.array([
-            [R[0, 0], R[0, 1], R[0, 2], t[0]],
-            [R[1, 0], R[1, 1], R[1, 2], t[1]],
-            [R[2, 0], R[2, 1], R[2, 2], t[2]],
-            [      0,       0,       0,    1],
-        ])
-
-        return pose
-
+        camera_pos = np.random.rand(3) * 2 - 1
+        # camera_up = np.random.rand(3) * 2 - 1
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
     elif view_preference.upper() == "PERIMETER":
-        t = np.random.rand(3) * 2 - 1
-        t[1] = 0
-        t[1] += (np.random.rand(1)*2-1)*noise_size
-        up = np.array([0, 1, 0], dtype=np.float32)
+        camera_pos = np.random.rand(3) * 2 - 1
+        camera_pos[1] = 0
+        # camera_pos[1] += rnd(-noise_size, noise_size)
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
     elif view_preference.upper() == "FRONT":
-        t = np.array([0, 0, 1], dtype=np.float32)
-        noise = (np.random.rand(3)*2-1) * noise_size
-        t += noise
-        up = np.array([0, 1, 0], dtype=np.float32)
+        camera_pos = np.array([0, 0, 1], dtype=np.float32)
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
     elif view_preference.upper() == "BACK":
-        t = np.array([0, 0, -1], dtype=np.float32)
-        noise = (np.random.rand(3)*2-1) * noise_size
-        t += noise
-        up = np.array([0, 1, 0], dtype=np.float32)
+        camera_pos = np.array([0, 0, -1], dtype=np.float32)
+        # noise = (np.random.rand(3)*2-1) * noise_size
+        # camera_pos += noise
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
     elif view_preference.upper() == "TOP":
-        t = np.array([0, 1, 0], dtype=np.float32)
-        noise = (np.random.rand(3)*2-1) * noise_size
-        t += noise
-        up = np.array([0, 0, 1], dtype=np.float32)
+        camera_pos = np.array([0, 1, 0], dtype=np.float32)
+        # noise = (np.random.rand(3)*2-1) * noise_size
+        # camera_pos += noise
+        camera_up = np.array([0, 0, 1], dtype=np.float32)
     elif view_preference.upper() == "BOTTOM":
-        t = np.array([0, -1, 0], dtype=np.float32)
-        noise = (np.random.rand(3)*2-1) * noise_size
-        t += noise
-        up = np.array([0, 0, 1], dtype=np.float32)
+        camera_pos = np.array([0, -1, 0], dtype=np.float32)
+        # noise = (np.random.rand(3)*2-1) * noise_size
+        # camera_pos += noise
+        camera_up = np.array([0, 0, 1], dtype=np.float32)
     elif view_preference.upper() == "SIDE":
-        if np.random.rand(1) < 0.5:
-            t = np.array([1, 0, 0], dtype=np.float32)
+        if np.random.rand() < 0.5:
+            camera_pos = np.array([1, 0, 0], dtype=np.float32)
         else:
-            t = np.array([-1, 0, 0], dtype=np.float32)
-        noise = (np.random.rand(3)*2-1) * noise_size
-        t += noise
-        up = np.array([0, 1, 0], dtype=np.float32)
+            camera_pos = np.array([-1, 0, 0], dtype=np.float32)
+        # noise = (np.random.rand(3)*2-1) * noise_size
+        # camera_pos += noise
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
     elif view_preference.upper() == "FRONTBACK":
-        if np.random.rand(1) < 0.5:
-            t = np.array([0, 0, 1], dtype=np.float32)
+        if np.random.rand() < 0.5:
+            camera_pos = np.array([0, 0, 1], dtype=np.float32)
         else:
-            t = np.array([0, 0, -1], dtype=np.float32)
-        noise = (np.random.rand(3)*2-1) * noise_size
-        t += noise
-        up = np.array([0, 1, 0], dtype=np.float32)
+            camera_pos = np.array([0, 0, -1], dtype=np.float32)
+        # noise = (np.random.rand(3)*2-1) * noise_size
+        # camera_pos += noise
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
     elif view_preference.upper() == "TOPBOTTOM":
-        if np.random.rand(1) < 0.5:
-            t = np.array([0, 1, 0], dtype=np.float32)
+        if np.random.rand() < 0.5:
+            camera_pos = np.array([0, 1, 0], dtype=np.float32)
         else:
-            t = np.array([0, -1, 0], dtype=np.float32)
-        noise = (np.random.rand(3)*2-1) * noise_size
-        t += noise
-        up = np.array([0, 1, 0], dtype=np.float32)
+            camera_pos = np.array([0, -1, 0], dtype=np.float32)
+        # noise = (np.random.rand(3)*2-1) * noise_size
+        # camera_pos += noise
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
     else:
         raise ValueError("Unknown view preference")
-
-    t_norm = t / np.linalg.norm(t)
-    t = t_norm * distance
+    noise = (np.random.rand(3)*2-1) * noise_size
     
-    up /= np.linalg.norm(up)
+    # print("camera_pose", camera_pos)
+    # print("noise", noise)
+    camera_pos += noise
+    # print("camera_pose after", camera_pos)
+
+    camera_pos_norm = camera_pos / np.linalg.norm(camera_pos)
+    camera_pos = camera_pos_norm * distance
+    # print("camera_pose normal", camera_pos)
+    
+    camera_up /= np.linalg.norm(camera_up)
     
     center = np.array([0, 0, 0], dtype=np.float32)
-    eye = t
-
-    f = center - eye
-    f /= np.linalg.norm(f)
-
-    s = np.cross(f, up)
     
+    f = center - camera_pos
+    f /= np.linalg.norm(f)
+    s = np.cross(f, camera_up)
     u = np.cross(s/np.linalg.norm(s), f)
 
     R = np.array([
@@ -299,7 +305,9 @@ def random_camera_pose(distance=3, view_preference=None, max_rotation=0):
         [s[2], u[2], -f[2]],
     ])
 
-    theta = np.random.rand() * 2*max_rotation - max_rotation
+    # theta = np.random.rand() * 2*max_rotation - max_rotation
+    theta = random_sgn() * max_rotation + random_sgn() * rnd(0, np.pi/5)
+    theta = 0
     rot_z = np.array([
         [np.cos(theta), -np.sin(theta), 0],
         [np.sin(theta),  np.cos(theta), 0],
@@ -308,13 +316,25 @@ def random_camera_pose(distance=3, view_preference=None, max_rotation=0):
     R = R @ rot_z
     
     pose = np.array([
-        [R[0, 0], R[0, 1], R[0, 2], eye[0]],
-        [R[1, 0], R[1, 1], R[1, 2], eye[1]],
-        [R[2, 0], R[2, 1], R[2, 2], eye[2]],
-        [      0,       0,       0,      1],
+        [R[0, 0], R[0, 1], R[0, 2], camera_pos[0]],
+        [R[1, 0], R[1, 1], R[1, 2], camera_pos[1]],
+        [R[2, 0], R[2, 1], R[2, 2], camera_pos[2]],
+        [      0,       0,       0,    1],
     ])
 
-    return pose
+    if return_vectors:
+        return pose, camera_pos, camera_up
+    else:
+        return pose
+
+
+def rnd(a_min=0, a_max=1):
+    rng = a_max-a_min
+    return np.random.rand() * rng + a_min
+
+
+def random_sgn():
+    return -1 if np.random.rand() < 0.5 else 1
 
 
 def get_joints_vertices(joints, vertices, joints_range=None):
@@ -354,6 +374,14 @@ def project_to_2d(pts, K, T):
     points_2d = points_2d[:, :2]
     
     return points_2d
+
+
+def draw_depth(img, depthmap):
+    overlay_img = img.copy()
+    depthmap = depthmap > 0
+    overlay_img[depthmap, :] = [0, 0, 255]
+    alpha = 0.6
+    return cv2.addWeighted(img, alpha, overlay_img, 1-alpha, 0)
 
 
 def draw_pose(img, kpts, joints_vis, draw_style="custom"):
@@ -531,7 +559,8 @@ def main(args):
 
             mesh = pyrender.Mesh.from_trimesh(tri_mesh)
 
-            scene = pyrender.Scene(bg_color=generate_color())
+            # scene = pyrender.Scene(bg_color=generate_color())
+            scene = pyrender.Scene(bg_color=(255, 0, 0))
             scene.add(mesh)
 
             light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
@@ -552,10 +581,11 @@ def main(args):
                     if last_camera_node is not None:
                         scene.remove_node(last_camera_node)
                     
-                    cam_pose = random_camera_pose(
+                    cam_pose, camera_position, camera_up = random_camera_pose(
                         distance=args.camera_distance,
                         view_preference=args.view_preference,
-                        max_rotation=args.max_rotation
+                        max_rotation=args.max_rotation,
+                        return_vectors=True
                     )
 
                     last_camera_node = scene.add(camera, pose=cam_pose)
@@ -570,15 +600,16 @@ def main(args):
                     else:
                         img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
                     img_id = int(abs(hash(img_name)))
-
+                    
                     # For COCO compatibility
                     img_name = "{:d}.jpg".format(img_id)
-                    
-                    camera_position = cam_pose[:3, -1].squeeze().tolist()
-                    camera_rotation = cam_pose[:3, :3].squeeze()
+                    print(img_name)
+
+                    # camera_position = cam_pose[:3, -1].squeeze().tolist()
+                    # camera_rotation = cam_pose[:3, :3].squeeze()
 
                     visibilities = msh.vertex_visibility(
-                        camera = camera_position,
+                        camera = camera_position.tolist(),
                         omni_directional_camera = True
                     )
 
@@ -622,16 +653,22 @@ def main(args):
                         int(min(1024, bbox_xy[2] + pad[0])),
                     ], dtype=np.int32)
 
-                    if "depth" in args.gt_type:
-                        cam_up = camera_rotation @ np.array([0, 1, 0])
+                    if "DEPTH" in args.gt_type:
+                        # cam_up = camera_rotation @ np.array([0, 1, 0])
+                        # cam_up /= np.linalg.norm(cam_up)
+                        # print("camera_position", camera_position, np.linalg.norm(camera_position))
+                        # print("cam_up  ", cam_up, np.linalg.norm(cam_up))
+                        # print("cam_up_2", cam_up_2, np.linalg.norm(cam_up_2))
+                        print("Camera position to m2d", camera_position)
+                        print("Camera up       to m2d", camera_up)
                         params = [{
                             'cam_pos': camera_position,
                             'cam_lookat': [0, 0, 0],
-                            'cam_up': cam_up,
+                            'cam_up': camera_up,
                             'x_fov': fov,  # End-to-end field of view in radians
-                            'near': 0.01, 'far': 10,
+                            'near': 0.01, 'far': 100,
                             'height': 1024, 'width': 1024,
-                            'is_depth': True,  # If false, output a ray displacement map, i.e. from the mesh surface to the camera center.
+                            'is_depth': False,  # If false, output a ray displacement map, i.e. from the mesh surface to the camera center.
                         }]
                         depthmap = m2d.mesh2depth(
                             vertices.copy().astype(np.float32),
@@ -646,11 +683,11 @@ def main(args):
                         depthmap *= 255
                         if args.crop:
                             depthmap = depthmap[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
-                        cv2.imwrite(
-                            osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
-                            depthmap.astype(np.uint8)
-                        )
-                    if "openpose" in args.gt_type:
+                        # cv2.imwrite(
+                        #     osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
+                        #     depthmap.astype(np.uint8)
+                        # )
+                    if "OPENPOSE" in args.gt_type:
                         posemap = np.zeros((1024, 1024, 3), dtype=np.uint8)
                         posemap_all = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose")
                         posemap_vis = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose_vis")
@@ -667,7 +704,6 @@ def main(args):
                         )
 
                     if args.plot_gt:
-                        rendered_img = draw_pose(rendered_img, joints_2d, joints_vis)
                         rendered_img = cv2.rectangle(
                             rendered_img,
                             (int(bbox_xy[0]), int(bbox_xy[1])),
@@ -675,6 +711,9 @@ def main(args):
                             color=(0, 255, 0),
                             thickness=1
                         )
+
+                        if "OPENPOSE" in args.gt_type:
+                            rendered_img = draw_pose(rendered_img, joints_2d, joints_vis)
 
                     annot_height = 1024
                     annot_width = 1024
@@ -690,6 +729,10 @@ def main(args):
 
                         # Crop the image
                         rendered_img = rendered_img[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
+                    
+                    if args.plot_gt:
+                        if "DEPTH" in args.gt_type:
+                            rendered_img = draw_depth(rendered_img, depthmap)
                        
                     save_path = osp.join(args.out_folder, img_name)
                     cv2.imwrite(save_path, rendered_img)
@@ -785,6 +828,7 @@ if __name__ == '__main__':
 
     if args.gt_type is None:
         args.gt_type = []
+    args.gt_type = list(map(lambda x: x.upper(), args.gt_type))
 
     if args.out_folder is None:
         args.out_folder = os.path.join(
