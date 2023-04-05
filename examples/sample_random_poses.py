@@ -201,12 +201,8 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
     elif view_preference.upper() == "PERIMETER":
         alpha_mean = 0
         alpha_range = np.pi
-        beta_mean = random_sgn() * np.pi/4
+        beta_mean = 0
         beta_range = noise_size
-        # alpha_mean = 0
-        # alpha_range = np.pi
-        # beta_mean = 0
-        # beta_range = noise_size
     elif view_preference.upper() == "FRONT":
         alpha_mean = 0
         alpha_range = noise_size
@@ -255,10 +251,13 @@ def polar_to_cartesian(alpha, beta, distance):
     return np.array([x, y, z])
     
 
-def random_camera_pose(distance=3, view_preference=None, max_rotation=0, return_vectors=False):
+def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vectors=False):
     
+    if rotation < 0:
+        rotation = rnd(0, 360)
+
     # Convert to radians
-    max_rotation = max_rotation / 180 * np.pi
+    rotation = rotation / 180 * np.pi
 
     alpha, beta, _ = random_3d_position_polar(distance, view_preference)
     camera_pos = polar_to_cartesian(alpha, beta, distance)
@@ -287,8 +286,8 @@ def random_camera_pose(distance=3, view_preference=None, max_rotation=0, return_
         [s[2], u[2], -f[2]],
     ])
 
-    # theta = np.random.rand() * 2*max_rotation - max_rotation
-    theta = random_sgn() * max_rotation + random_sgn() * rnd(0, np.pi/5)
+    # theta = np.random.rand() * 2*rotation - rotation
+    theta = random_sgn() * rotation + random_sgn() * rnd(0, np.pi/5)
     rot_z = np.array([
         [np.cos(theta), -np.sin(theta), 0],
         [np.sin(theta),  np.cos(theta), 0],
@@ -565,7 +564,7 @@ def main(args):
                     cam_pose, camera_position, camera_up = random_camera_pose(
                         distance=args.camera_distance,
                         view_preference=args.view_preference,
-                        max_rotation=args.max_rotation,
+                        rotation=args.rotation,
                         return_vectors=True
                     )
 
@@ -772,8 +771,8 @@ if __name__ == '__main__':
     parser.add_argument('--view-preference', default=None, type=str,
                         dest='view_preference',
                         help='Prefer some specific types of views.')
-    parser.add_argument('--max-rotation', default=0, type=int,
-                        dest='max_rotation',
+    parser.add_argument('--rotation', default=0, type=int,
+                        dest='rotation',
                         help='Maximal rotation of the image; in degrees')
     parser.add_argument('--camera-distance', default=2, type=float,
                         dest='camera_distance',
@@ -801,14 +800,23 @@ if __name__ == '__main__':
     args.gt_type = list(map(lambda x: x.upper(), args.gt_type))
 
     if args.out_folder is None:
-        args.out_folder = os.path.join(
-            "sampled_poses",
-            "simplicity_{:.1f}_view_{}_rotation_{:03d}".format(
-                args.pose_simplicity,
-                args.view_preference,
-                args.max_rotation,
+        if args.rotation > 0:
+            args.out_folder = os.path.join(
+                "sampled_poses",
+                "simplicity_{:.1f}_view_{}_rotation_{:03d}".format(
+                    args.pose_simplicity,
+                    args.view_preference,
+                    args.rotation,
+                )
             )
-        )
+        else:
+            args.out_folder = os.path.join(
+                "sampled_poses",
+                "simplicity_{:.1f}_view_{}_rotation_RND".format(
+                    args.pose_simplicity,
+                    args.view_preference,
+                )
+            )
 
     args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))
 
