@@ -187,117 +187,99 @@ def generate_pose(typical_pose=None, simplicity=5):
     return body_pose
 
 
-def random_camera_pose(distance=3, view_preference=None, max_rotation=0, return_vectors=False):
+def random_3d_position_polar(distance=2.0, view_preference=None):
+    # Noise is 10°
+    noise_size = 20 / 180 * np.pi
+
+    # ALPHA - rotation around the sides
+    # BETA  - rotation around the top and bottom
+    if view_preference is None:
+        alpha_mean = 0
+        alpha_range = np.pi
+        beta_mean = 0
+        beta_range = np.pi
+    elif view_preference.upper() == "PERIMETER":
+        alpha_mean = 0
+        alpha_range = np.pi
+        beta_mean = random_sgn() * np.pi/4
+        beta_range = noise_size
+        # alpha_mean = 0
+        # alpha_range = np.pi
+        # beta_mean = 0
+        # beta_range = noise_size
+    elif view_preference.upper() == "FRONT":
+        alpha_mean = 0
+        alpha_range = noise_size
+        beta_mean = 0
+        beta_range = 3*noise_size
+    elif view_preference.upper() == "BACK":
+        alpha_mean = np.pi
+        alpha_range = noise_size
+        beta_mean = 0
+        beta_range = 3*noise_size
+    elif view_preference.upper() == "SIDE":
+        alpha_mean = random_sgn() * np.pi/2
+        alpha_range = noise_size
+        beta_mean = 0
+        beta_range = 3*noise_size
+    elif view_preference.upper() == "TOP":
+        alpha_mean = 0
+        alpha_range = noise_size
+        beta_mean = np.pi/2
+        beta_range = noise_size
+    elif view_preference.upper() == "BOTTOM":
+        alpha_mean = 0
+        alpha_range = noise_size
+        beta_mean = - np.pi/2
+        beta_range = noise_size
+    else:
+        raise ValueError("Unknown view preference")
     
-    # Convert to radians
-    max_rotation = max_rotation / 180 * np.pi
-
-    noise_size = 0.3
-
     # [ 0,  0,  1] - FRONT view
     # [ 0,  0, -1] - BACK view (do not converge)
     # [ 0,  1,  0] - TOP view
     # [ 0, -1,  0] - BOTTOM view
     # [ 1,  0,  0] - LEFT view
     # [-1,  0,  0] - RIGHT view
+    alpha = alpha_mean + rnd(-alpha_range, alpha_range)
+    beta = beta_mean + rnd(-beta_range, beta_range)
     
-    # if view_preference is None:
-    #     camera_pos = np.random.rand(3) * 2 - 1
-    #     camera_pos_norm = camera_pos / np.linalg.norm(camera_pos)
-    #     camera_pos = camera_pos_norm * distance
+    return alpha, beta, distance
 
-    #     a = [0, 0, 1]
-    #     b = camera_pos_norm
-    #     v = np.cross(a, b)
-    #     c = np.dot(a, b)
-    #     vx = np.array([
-    #         [0, -v[2], v[1]],
-    #         [v[2], 0, -v[0]],
-    #         [-v[1], v[0], 0],
-    #     ])
 
-    #     R = np.eye(3) + vx + np.dot(vx, vx) * 1/(1+c)
-    #     pose = np.array([
-    #         [R[0, 0], R[0, 1], R[0, 2], camera_pos[0]],
-    #         [R[1, 0], R[1, 1], R[1, 2], camera_pos[1]],
-    #         [R[2, 0], R[2, 1], R[2, 2], camera_pos[2]],
-    #         [      0,       0,       0,    1],
-    #     ])
+def polar_to_cartesian(alpha, beta, distance):
+    y = distance * np.sin(beta)
+    a = distance * np.cos(beta)
+    x = a * np.sin(alpha)
+    z = a * np.cos(alpha)
+    return np.array([x, y, z])
+    
 
-    #     return pose
+def random_camera_pose(distance=3, view_preference=None, max_rotation=0, return_vectors=False):
+    
+    # Convert to radians
+    max_rotation = max_rotation / 180 * np.pi
 
-    if view_preference is None:
-        camera_pos = np.random.rand(3) * 2 - 1
-        # camera_up = np.random.rand(3) * 2 - 1
-        camera_up = np.array([0, 1, 0], dtype=np.float32)
-    elif view_preference.upper() == "PERIMETER":
-        camera_pos = np.random.rand(3) * 2 - 1
-        camera_pos[1] = 0
-        # camera_pos[1] += rnd(-noise_size, noise_size)
-        camera_up = np.array([0, 1, 0], dtype=np.float32)
-    elif view_preference.upper() == "FRONT":
-        camera_pos = np.array([0, 0, 1], dtype=np.float32)
-        camera_up = np.array([0, 1, 0], dtype=np.float32)
-    elif view_preference.upper() == "BACK":
-        camera_pos = np.array([0, 0, -1], dtype=np.float32)
-        # noise = (np.random.rand(3)*2-1) * noise_size
-        # camera_pos += noise
-        camera_up = np.array([0, 1, 0], dtype=np.float32)
-    elif view_preference.upper() == "TOP":
-        camera_pos = np.array([0, 1, 0], dtype=np.float32)
-        # noise = (np.random.rand(3)*2-1) * noise_size
-        # camera_pos += noise
+    alpha, beta, _ = random_3d_position_polar(distance, view_preference)
+    camera_pos = polar_to_cartesian(alpha, beta, distance)
+
+    # Default camera_up is head up
+    camera_up = np.array([0, 1, 0], dtype=np.float32)
+    # For TOP and BOTTOM, default camera_up is front
+    
+    if not view_preference is None and view_preference.upper() in ["TOP", "BOTTOM"]:
         camera_up = np.array([0, 0, 1], dtype=np.float32)
-    elif view_preference.upper() == "BOTTOM":
-        camera_pos = np.array([0, -1, 0], dtype=np.float32)
-        # noise = (np.random.rand(3)*2-1) * noise_size
-        # camera_pos += noise
-        camera_up = np.array([0, 0, 1], dtype=np.float32)
-    elif view_preference.upper() == "SIDE":
-        if np.random.rand() < 0.5:
-            camera_pos = np.array([1, 0, 0], dtype=np.float32)
-        else:
-            camera_pos = np.array([-1, 0, 0], dtype=np.float32)
-        # noise = (np.random.rand(3)*2-1) * noise_size
-        # camera_pos += noise
-        camera_up = np.array([0, 1, 0], dtype=np.float32)
-    elif view_preference.upper() == "FRONTBACK":
-        if np.random.rand() < 0.5:
-            camera_pos = np.array([0, 0, 1], dtype=np.float32)
-        else:
-            camera_pos = np.array([0, 0, -1], dtype=np.float32)
-        # noise = (np.random.rand(3)*2-1) * noise_size
-        # camera_pos += noise
-        camera_up = np.array([0, 1, 0], dtype=np.float32)
-    elif view_preference.upper() == "TOPBOTTOM":
-        if np.random.rand() < 0.5:
-            camera_pos = np.array([0, 1, 0], dtype=np.float32)
-        else:
-            camera_pos = np.array([0, -1, 0], dtype=np.float32)
-        # noise = (np.random.rand(3)*2-1) * noise_size
-        # camera_pos += noise
-        camera_up = np.array([0, 1, 0], dtype=np.float32)
-    else:
-        raise ValueError("Unknown view preference")
-    noise = (np.random.rand(3)*2-1) * noise_size
-    
-    # print("camera_pose", camera_pos)
-    # print("noise", noise)
-    camera_pos += noise
-    # print("camera_pose after", camera_pos)
 
-    camera_pos_norm = camera_pos / np.linalg.norm(camera_pos)
-    camera_pos = camera_pos_norm * distance
-    # print("camera_pose normal", camera_pos)
-    
-    camera_up /= np.linalg.norm(camera_up)
-    
     center = np.array([0, 0, 0], dtype=np.float32)
-    
+
     f = center - camera_pos
     f /= np.linalg.norm(f)
+    
     s = np.cross(f, camera_up)
-    u = np.cross(s/np.linalg.norm(s), f)
+    s /= np.linalg.norm(s)
+
+    u = np.cross(s, f)
+    u /= np.linalg.norm(u)
 
     R = np.array([
         [s[0], u[0], -f[0]],
@@ -305,16 +287,6 @@ def random_camera_pose(distance=3, view_preference=None, max_rotation=0, return_
         [s[2], u[2], -f[2]],
     ])
 
-    # theta = np.random.rand() * 2*max_rotation - max_rotation
-    theta = random_sgn() * max_rotation + random_sgn() * rnd(0, np.pi/5)
-    theta = 0
-    rot_z = np.array([
-        [np.cos(theta), -np.sin(theta), 0],
-        [np.sin(theta),  np.cos(theta), 0],
-        [            0,              0, 1],
-    ])
-    R = R @ rot_z
-    
     pose = np.array([
         [R[0, 0], R[0, 1], R[0, 2], camera_pos[0]],
         [R[1, 0], R[1, 1], R[1, 2], camera_pos[1]],
@@ -559,8 +531,7 @@ def main(args):
 
             mesh = pyrender.Mesh.from_trimesh(tri_mesh)
 
-            # scene = pyrender.Scene(bg_color=generate_color())
-            scene = pyrender.Scene(bg_color=(255, 0, 0))
+            scene = pyrender.Scene(bg_color=generate_color())
             scene.add(mesh)
 
             light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
@@ -603,10 +574,6 @@ def main(args):
                     
                     # For COCO compatibility
                     img_name = "{:d}.jpg".format(img_id)
-                    print(img_name)
-
-                    # camera_position = cam_pose[:3, -1].squeeze().tolist()
-                    # camera_rotation = cam_pose[:3, :3].squeeze()
 
                     visibilities = msh.vertex_visibility(
                         camera = camera_position.tolist(),
@@ -654,13 +621,6 @@ def main(args):
                     ], dtype=np.int32)
 
                     if "DEPTH" in args.gt_type:
-                        # cam_up = camera_rotation @ np.array([0, 1, 0])
-                        # cam_up /= np.linalg.norm(cam_up)
-                        # print("camera_position", camera_position, np.linalg.norm(camera_position))
-                        # print("cam_up  ", cam_up, np.linalg.norm(cam_up))
-                        # print("cam_up_2", cam_up_2, np.linalg.norm(cam_up_2))
-                        print("Camera position to m2d", camera_position)
-                        print("Camera up       to m2d", camera_up)
                         params = [{
                             'cam_pos': camera_position,
                             'cam_lookat': [0, 0, 0],
@@ -683,10 +643,10 @@ def main(args):
                         depthmap *= 255
                         if args.crop:
                             depthmap = depthmap[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
-                        # cv2.imwrite(
-                        #     osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
-                        #     depthmap.astype(np.uint8)
-                        # )
+                        cv2.imwrite(
+                            osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
+                            depthmap.astype(np.uint8)
+                        )
                     if "OPENPOSE" in args.gt_type:
                         posemap = np.zeros((1024, 1024, 3), dtype=np.uint8)
                         posemap_all = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose")
