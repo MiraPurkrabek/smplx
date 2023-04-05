@@ -287,6 +287,16 @@ def random_camera_pose(distance=3, view_preference=None, max_rotation=0, return_
         [s[2], u[2], -f[2]],
     ])
 
+    # theta = np.random.rand() * 2*max_rotation - max_rotation
+    theta = random_sgn() * max_rotation + random_sgn() * rnd(0, np.pi/5)
+    rot_z = np.array([
+        [np.cos(theta), -np.sin(theta), 0],
+        [np.sin(theta),  np.cos(theta), 0],
+        [            0,              0, 1],
+    ])
+    R = R @ rot_z
+    camera_up = R @ camera_up
+
     pose = np.array([
         [R[0, 0], R[0, 1], R[0, 2], camera_pos[0]],
         [R[1, 0], R[1, 1], R[1, 2], camera_pos[1]],
