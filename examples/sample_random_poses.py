@@ -267,7 +267,7 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
     # For TOP and BOTTOM, default camera_up is front
     
     if not view_preference is None and view_preference.upper() in ["TOP", "BOTTOM"]:
-        camera_up = np.array([0, 0, 1], dtype=np.float32)
+        camera_up = np.array([0, 1, 0], dtype=np.float32)
 
     center = np.array([0, 0, 0], dtype=np.float32)
 
@@ -800,21 +800,21 @@ if __name__ == '__main__':
     args.gt_type = list(map(lambda x: x.upper(), args.gt_type))
 
     if args.out_folder is None:
-        if args.rotation > 0:
+        if args.rotation < 0:
+            args.out_folder = os.path.join(
+                "sampled_poses",
+                "simplicity_{:.1f}_view_{}_rotation_RND".format(
+                    args.pose_simplicity,
+                    args.view_preference,
+                )
+            )
+        else:
             args.out_folder = os.path.join(
                 "sampled_poses",
                 "simplicity_{:.1f}_view_{}_rotation_{:03d}".format(
                     args.pose_simplicity,
                     args.view_preference,
                     args.rotation,
-                )
-            )
-        else:
-            args.out_folder = os.path.join(
-                "sampled_poses",
-                "simplicity_{:.1f}_view_{}_rotation_RND".format(
-                    args.pose_simplicity,
-                    args.view_preference,
                 )
             )
 
