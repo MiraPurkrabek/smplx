@@ -485,7 +485,7 @@ def main(args):
     }
 
     print("Generating poses and views...")
-    with tqdm(total=args.num_views * args.num_poses) as progress_bar:
+    with tqdm(total=args.num_views * args.num_poses, ascii=True) as progress_bar:
 
         for pose_i in range(args.num_poses):
             if args.gender.upper() == "RANDOM":
