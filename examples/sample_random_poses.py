@@ -501,8 +501,20 @@ def main(args):
 
             body_pose = generate_pose(simplicity=args.pose_simplicity)
 
-            output = model(betas=betas, expression=expression,
-                        return_verts=True, body_pose=body_pose)
+            hand_pose = model.left_hand_pose
+            left_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
+            right_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
+            
+            output = model(
+                betas=betas,
+                expression=expression,
+                return_verts=True,
+                body_pose=body_pose,
+                left_hand_pose=left_hand_pose,
+                right_hand_pose=right_hand_pose,
+                )
+
+
             vertices = output.vertices.detach().cpu().numpy().squeeze()
             joints = output.joints.detach().cpu().numpy().squeeze()
             coco_joints = joints[[v["idx"] for _, v in COCO_JOINTS.items()], :]
