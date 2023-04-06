@@ -50,6 +50,9 @@ def generate_pose(typical_pose=None, simplicity=5):
     # Counter-clockwise rotation
     # Side bend
 
+    if simplicity < 0:
+        simplicity = rnd(1.0, 1.5)
+
     joints = {
         "Left leg": 0,
         "Right leg": 1,
@@ -188,7 +191,11 @@ def generate_pose(typical_pose=None, simplicity=5):
 
 
 def random_3d_position_polar(distance=2.0, view_preference=None):
-    # Noise is 10°
+    
+    if distance < 0:
+        distance = rnd(1.5, 5.0)
+    
+    # Noise is 20°
     noise_size = 20 / 180 * np.pi
 
     # ALPHA - rotation around the sides
@@ -259,7 +266,7 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
     # Convert to radians
     rotation = rotation / 180 * np.pi
 
-    alpha, beta, _ = random_3d_position_polar(distance, view_preference)
+    alpha, beta, distance = random_3d_position_polar(distance, view_preference)
     camera_pos = polar_to_cartesian(alpha, beta, distance)
 
     # Default camera_up is head up
@@ -529,21 +536,22 @@ def main(args):
                 skin_color = SKIN_COLOR[[2, 1, 0, 3]]
             vertex_colors = np.ones([vertices.shape[0], 4]) * skin_color
 
-            if np.random.rand(1)[0] < 0.5:
-                BOTTOM = PANTS_PARTS
-            else:    
-                BOTTOM = SHORTS_PARTS
-            if np.random.rand(1)[0] < 0.5:
-                TOP = TSHIRT_PARTS
-            else:    
-                TOP = SHIRT_PARTS
+            if not args.naked:
+                if np.random.rand(1)[0] < 0.5:
+                    BOTTOM = PANTS_PARTS
+                else:    
+                    BOTTOM = SHORTS_PARTS
+                if np.random.rand(1)[0] < 0.5:
+                    TOP = TSHIRT_PARTS
+                else:    
+                    TOP = SHIRT_PARTS
 
-            segments = [TOP, BOTTOM, SHOES_PARTS]
-            segments_colors = [generate_color() for _ in segments]
+                segments = [TOP, BOTTOM, SHOES_PARTS]
+                segments_colors = [generate_color() for _ in segments]
 
-            for seg, seg_col in zip(segments, segments_colors):
-                for body_part in seg:
-                    vertex_colors[seg_dict[body_part], :] = seg_col
+                for seg, seg_col in zip(segments, segments_colors):
+                    for body_part in seg:
+                        vertex_colors[seg_dict[body_part], :] = seg_col
 
             joints_vertices = get_joints_vertices(coco_joints, vertices, joints_range)
 
@@ -557,7 +565,7 @@ def main(args):
 
             light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
             for _ in range(5):
-                scene.add(light, pose=random_camera_pose(distance=2*args.camera_distance))
+                scene.add(light, pose=random_camera_pose(distance=abs(2*args.camera_distance)))
             
             if args is not None and args.show:
                 # render scene
@@ -771,13 +779,13 @@ if __name__ == '__main__':
                         action="store_true", default=False,
                         help='Compute the contour of the face')
     # Added params
-    parser.add_argument('--num-views', default=3, type=int,
+    parser.add_argument('--num-views', default=2, type=int,
                         dest='num_views',
                         help='Number of views for each pose.')
     parser.add_argument('--num-poses', default=1, type=int,
                         dest='num_poses',
                         help='Number of poses to sample.')
-    parser.add_argument('--pose-simplicity', default=1, type=float,
+    parser.add_argument('--pose-simplicity', default=1.5, type=float,
                         dest='pose_simplicity',
                         help='Measure of pose simplicty. The higher number, the simpler poses')
     parser.add_argument('--view-preference', default=None, type=str,
@@ -801,6 +809,9 @@ if __name__ == '__main__':
     parser.add_argument('--crop',
                         action="store_true", default=False,
                         help='If True, will crop the image by the computed bbox (slightly larger)')
+    parser.add_argument('--naked',
+                        action="store_true", default=False,
+                        help='If True, humans will have uniform color (no clothes colors)')
     # parser.add_argument('--gt-type', default='NONE', type=str,
     #                     choices=['NONE', 'depth', 'openpose', 'cocopose'],
     #                     help='The type of model to load')
@@ -813,22 +824,34 @@ if __name__ == '__main__':
 
     if args.out_folder is None:
         if args.rotation < 0:
-            args.out_folder = os.path.join(
-                "sampled_poses",
-                "simplicity_{:.1f}_view_{}_rotation_RND".format(
-                    args.pose_simplicity,
-                    args.view_preference,
-                )
-            )
+            rotation_str = "RND"
         else:
-            args.out_folder = os.path.join(
-                "sampled_poses",
-                "simplicity_{:.1f}_view_{}_rotation_{:03d}".format(
-                    args.pose_simplicity,
-                    args.view_preference,
-                    args.rotation,
-                )
+            rotation_str = "{:03d}".format(args.rotation)
+
+        if args.camera_distance < 0:
+            distance_str = "RND"
+        else:
+            distance_str = "{:.1f}".format(args.camera_distance)
+        
+        if args.pose_simplicity < 0:
+            simplicity_str = "RND"
+        else:
+            simplicity_str = "{:.1f}".format(args.pose_simplicity)
+
+        naked_str = ""
+        if args.naked:
+            naked_str = "_naked"
+
+        args.out_folder = os.path.join(
+            "sampled_poses",
+            "distance_{:s}_simplicity_{:s}_view_{}_rotation_{:s}{:s}".format(
+                distance_str,
+                simplicity_str,
+                args.view_preference,
+                rotation_str,
+                naked_str,
             )
+        )
 
     args.model_folder = osp.expanduser(osp.expandvars(args.model_folder))
 
