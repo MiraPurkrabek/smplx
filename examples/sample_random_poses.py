@@ -37,6 +37,8 @@ from psbody.mesh import Mesh, MeshViewers
 
 import mesh_to_depth as m2d
 
+import _mask as mask
+
 TSHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm"]
 SHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm", "leftForeArm", "rightForeArm"]
 SHORTS_PARTS = ["rightUpLeg", "leftUpLeg"]
@@ -649,29 +651,30 @@ def main(args):
                         int(min(1024, bbox_xy[2] + pad[0])),
                     ], dtype=np.int32)
 
+                    params = [{
+                        'cam_pos': camera_position,
+                        'cam_lookat': [0, 0, 0],
+                        'cam_up': camera_up,
+                        'x_fov': fov,  # End-to-end field of view in radians
+                        'near': 0.01, 'far': 100,
+                        'height': 1024, 'width': 1024,
+                        'is_depth': False,  # If false, output a ray displacement map, i.e. from the mesh surface to the camera center.
+                    }]
+                    depthmap = m2d.mesh2depth(
+                        vertices.copy().astype(np.float32),
+                        model.faces.astype(np.uint32),
+                        params,
+                        empty_pixel_value=-1,
+                    )[0]
+                    depthmap[depthmap < 0] =  1.1 * np.max(depthmap)
+                    depthmap = depthmap - np.min(depthmap)
+                    depthmap /= np.max(depthmap)
+                    depthmap = 1 - depthmap
+                    depthmap *= 255
+                    if args.crop:
+                        depthmap = depthmap[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
+                    
                     if "DEPTH" in args.gt_type:
-                        params = [{
-                            'cam_pos': camera_position,
-                            'cam_lookat': [0, 0, 0],
-                            'cam_up': camera_up,
-                            'x_fov': fov,  # End-to-end field of view in radians
-                            'near': 0.01, 'far': 100,
-                            'height': 1024, 'width': 1024,
-                            'is_depth': False,  # If false, output a ray displacement map, i.e. from the mesh surface to the camera center.
-                        }]
-                        depthmap = m2d.mesh2depth(
-                            vertices.copy().astype(np.float32),
-                            model.faces.astype(np.uint32),
-                            params,
-                            empty_pixel_value=-1,
-                        )[0]
-                        depthmap[depthmap < 0] =  1.1 * np.max(depthmap)
-                        depthmap = depthmap - np.min(depthmap)
-                        depthmap /= np.max(depthmap)
-                        depthmap = 1 - depthmap
-                        depthmap *= 255
-                        if args.crop:
-                            depthmap = depthmap[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
                         cv2.imwrite(
                             osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
                             depthmap.astype(np.uint8)
@@ -732,10 +735,12 @@ def main(args):
                         "width": annot_width,
                         "id": img_id,
                     })
+
+                    area = float(np.count_nonzero(depthmap > 0))
                     gt_coco_dict["annotations"].append({
                         "num_keypoints": int(np.sum(joints_vis)),
                         "iscrowd": 0,
-                        "area": float(bbox_wh[2] * bbox_wh[3]),
+                        "area": area,
                         "keypoints": keypoints.flatten().tolist(),
                         "image_id": img_id,
                         "bbox": bbox_wh.flatten().tolist(),
