@@ -583,7 +583,7 @@ def main(args):
                     if last_camera_node is not None:
                         scene.remove_node(last_camera_node)
                     
-                    cam_pose, camera_position, camera_up = random_camera_pose(
+                    cam_pose, camera_position, _ = random_camera_pose(
                         distance=args.camera_distance,
                         view_preference=args.view_preference,
                         rotation=args.rotation,
@@ -593,8 +593,15 @@ def main(args):
                     last_camera_node = scene.add(camera, pose=cam_pose)
 
                     r = pyrender.OffscreenRenderer(1024, 1024)
-                    rendered_img, _ = r.render(scene)
+                    rendered_img, depthmap = r.render(scene)
                     rendered_img = rendered_img.astype(np.uint8)
+
+                    # Process the depthmap
+                    depthmap[depthmap <= 0] =  1.1 * np.max(depthmap)
+                    depthmap = depthmap - np.min(depthmap)
+                    depthmap /= np.max(depthmap)
+                    depthmap = 1 - depthmap
+                    depthmap *= 255
 
                     # Name file differently to avoid confusion
                     if args.plot_gt:
@@ -651,26 +658,6 @@ def main(args):
                         int(min(1024, bbox_xy[2] + pad[0])),
                     ], dtype=np.int32)
 
-                    params = [{
-                        'cam_pos': camera_position,
-                        'cam_lookat': [0, 0, 0],
-                        'cam_up': camera_up,
-                        'x_fov': fov,  # End-to-end field of view in radians
-                        'near': 0.01, 'far': 100,
-                        'height': 1024, 'width': 1024,
-                        'is_depth': False,  # If false, output a ray displacement map, i.e. from the mesh surface to the camera center.
-                    }]
-                    depthmap = m2d.mesh2depth(
-                        vertices.copy().astype(np.float32),
-                        model.faces.astype(np.uint32),
-                        params,
-                        empty_pixel_value=-1,
-                    )[0]
-                    depthmap[depthmap < 0] =  1.1 * np.max(depthmap)
-                    depthmap = depthmap - np.min(depthmap)
-                    depthmap /= np.max(depthmap)
-                    depthmap = 1 - depthmap
-                    depthmap *= 255
                     if args.crop:
                         depthmap = depthmap[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
                     
