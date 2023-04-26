@@ -35,8 +35,6 @@ from smplx.joint_names import COCO_JOINTS, COCO_SKELETON, OPENPOSE_SKELETON, OPE
 
 from psbody.mesh import Mesh, MeshViewers
 
-import mesh_to_depth as m2d
-
 import _mask as mask
 
 TSHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm"]
@@ -487,9 +485,19 @@ def main(args):
     }
 
     print("Generating poses and views...")
+
+    # Read the background image from the file
+    backgrounds_folder = os.path.join("images", "backgrounds")
+    background_list = os.listdir(backgrounds_folder)
+
     with tqdm(total=args.num_views * args.num_poses, ascii=True) as progress_bar:
 
         for pose_i in range(args.num_poses):
+            
+            random_background_image = np.random.choice(background_list)
+            background_image = cv2.imread(os.path.join(backgrounds_folder, random_background_image))
+            background_image = cv2.resize(background_image, (1024, 1024))
+            
             if args.gender.upper() == "RANDOM":
                 gndr = np.random.choice(["male", "female", "neutral"])
             else:
@@ -559,18 +567,18 @@ def main(args):
 
             tri_mesh = trimesh.Trimesh(vertices, model.faces,
                                     vertex_colors=vertex_colors)
-
             mesh = pyrender.Mesh.from_trimesh(tri_mesh)
 
             scene = pyrender.Scene(bg_color=generate_color())
             scene.add(mesh)
 
+            # Add lights
             light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
             for _ in range(5):
                 scene.add(light, pose=random_camera_pose(distance=abs(2*args.camera_distance)))
             
             if args is not None and args.show:
-                # render scene
+                # Render scene
                 for view_idx in range(args.num_views):    
                     progress_bar.update()
                 pyrender.Viewer(scene, use_raymond_lighting=True)
@@ -602,6 +610,13 @@ def main(args):
                     depthmap /= np.max(depthmap)
                     depthmap = 1 - depthmap
                     depthmap *= 255
+
+                    # Add background
+                    rendered_img_w_bckg = background_image.copy()
+                    depthmap_mask = depthmap > 0
+                    # depthmap_mask = cv2.erode(depthmap_mask.astype(np.uint8), np.ones((3, 3)), iterations=1).astype(bool)
+                    rendered_img_w_bckg[depthmap_mask, :] = rendered_img[depthmap_mask, :]
+                    rendered_img = rendered_img_w_bckg
 
                     # Name file differently to avoid confusion
                     if args.plot_gt:
@@ -712,7 +727,7 @@ def main(args):
                     if args.plot_gt:
                         if "DEPTH" in args.gt_type:
                             rendered_img = draw_depth(rendered_img, depthmap)
-                       
+                
                     save_path = osp.join(args.out_folder, img_name)
                     cv2.imwrite(save_path, rendered_img)
 
