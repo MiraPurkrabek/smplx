@@ -35,7 +35,6 @@ from smplx.joint_names import COCO_JOINTS, COCO_SKELETON, OPENPOSE_SKELETON, OPE
 
 from psbody.mesh import Mesh, MeshViewers
 
-import _mask as mask
 
 TSHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm"]
 SHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm", "leftForeArm", "rightForeArm"]
@@ -462,13 +461,90 @@ def draw_pose(img, kpts, joints_vis, draw_style="custom"):
     return img
 
 
+def get_textured_mesh(vertices, texture_path=None, args=None):
+    
+    # When no texture path is provided, use a random one
+    if texture_path is None:
+        texture_folder = np.random.choice(os.listdir("textures"))
+        texture_path = os.path.join(
+            "textures",
+            texture_folder,
+            "images",
+            np.random.choice(os.listdir(os.path.join("textures", texture_folder, "images")))
+        )
+    else:
+        texture_folder = os.path.dirname(os.path.dirname(texture_path))
+
+    indices_path = os.path.join(
+        "textures",
+        texture_folder,
+        "mappings",
+        "SMPLX_MALE_indices.npz",
+    )
+    obj_path = os.path.join(
+        "textures",
+        texture_folder,
+        "mappings",
+        "SMPLX_UV.obj",
+    )
+
+    # Load the texture image with OpenCV
+    if args is not None and args.show:
+        im = cv2.imread(texture_path)[:, :, ::-1]
+    else:
+        im = cv2.imread(texture_path)
+
+    # Load the OBJ file with UV map
+    m = trimesh.load(obj_path)
+
+    # Load the pre-computed mapping from 10475 to 11313 vertices
+    indices_to_sort = np.load(indices_path)['indices']
+    m.vertices = vertices[indices_to_sort, :]
+
+    # Create the Texture and a trimesh object
+    material = trimesh.visual.texture.SimpleMaterial(image=im)
+    color_visuals = trimesh.visual.TextureVisuals(uv=m.visual.uv, image=im, material=material)
+    tri_mesh = trimesh.Trimesh(vertices=m.vertices, faces=m.faces, visual=color_visuals, validate=True, process=False)
+
+    return tri_mesh
+
+
+def get_colored_mesh(vertices, faces, args):
+    with open("models/smplx/SMPLX_segmentation.json", "r") as fp:
+        seg_dict = json.load(fp)
+    
+    # Default (= skin) color
+    if args is not None and args.show:
+        skin_color = SKIN_COLOR
+    else:
+        skin_color = SKIN_COLOR[[2, 1, 0, 3]]
+    vertex_colors = np.ones([vertices.shape[0], 4]) * skin_color
+
+    if not args.naked:
+        if np.random.rand(1)[0] < 0.5:
+            BOTTOM = PANTS_PARTS
+        else:    
+            BOTTOM = SHORTS_PARTS
+        if np.random.rand(1)[0] < 0.5:
+            TOP = TSHIRT_PARTS
+        else:    
+            TOP = SHIRT_PARTS
+
+        segments = [TOP, BOTTOM, SHOES_PARTS]
+        segments_colors = [generate_color() for _ in segments]
+
+        for seg, seg_col in zip(segments, segments_colors):
+            for body_part in seg:
+                vertex_colors[seg_dict[body_part], :] = seg_col
+
+    tri_mesh = trimesh.Trimesh(vertices, faces, vertex_colors=vertex_colors)
+    return tri_mesh
+
+
 def main(args):
     
     shutil.rmtree(args.out_folder, ignore_errors=True)
     os.makedirs(args.out_folder, exist_ok=True)
-
-    with open("models/smplx/SMPLX_segmentation.json", "r") as fp:
-        seg_dict = json.load(fp)
 
     gt_coco_dict = {
         "images": [],
@@ -498,7 +574,9 @@ def main(args):
             background_image = cv2.imread(os.path.join(backgrounds_folder, random_background_image))
             background_image = cv2.resize(background_image, (1024, 1024))
             
-            if args.gender.upper() == "RANDOM":
+            if args.save_default_pose:
+                gndr = "male"
+            elif args.gender.upper() == "RANDOM":
                 gndr = np.random.choice(["male", "female", "neutral"])
             else:
                 gndr = args.gender
@@ -510,18 +588,23 @@ def main(args):
                                 ext=args.model_ext)
             
             betas, expression = None, None
-            if args.sample_shape:
+            if args.sample_shape and not args.save_default_pose:
                 betas = torch.randn([1, model.num_betas], dtype=torch.float32)
-            if args.sample_expression:
+            if args.sample_expression and not args.save_default_pose:
                 expression = torch.randn(
                     [1, model.num_expression_coeffs], dtype=torch.float32)
 
-            body_pose = generate_pose(simplicity=args.pose_simplicity)
 
             hand_pose = model.left_hand_pose
-            left_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
-            right_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
-            
+            if args.save_default_pose:
+                body_pose = torch.zeros([1, model.NUM_BODY_JOINTS*3], dtype=torch.float32)
+                left_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
+                right_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
+            else:
+                body_pose = generate_pose(simplicity=args.pose_simplicity)
+                left_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
+                right_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
+
             output = model(
                 betas=betas,
                 expression=expression,
@@ -529,8 +612,8 @@ def main(args):
                 body_pose=body_pose,
                 left_hand_pose=left_hand_pose,
                 right_hand_pose=right_hand_pose,
+                jaw_pose=None,
                 )
-
 
             vertices = output.vertices.detach().cpu().numpy().squeeze()
             joints = output.joints.detach().cpu().numpy().squeeze()
@@ -539,41 +622,30 @@ def main(args):
 
             msh = Mesh(vertices, model.faces)
 
-            # Default (= skin) color
-            if args is not None and args.show:
-                skin_color = SKIN_COLOR
-            else:
-                skin_color = SKIN_COLOR[[2, 1, 0, 3]]
-            vertex_colors = np.ones([vertices.shape[0], 4]) * skin_color
-
-            if not args.naked:
-                if np.random.rand(1)[0] < 0.5:
-                    BOTTOM = PANTS_PARTS
-                else:    
-                    BOTTOM = SHORTS_PARTS
-                if np.random.rand(1)[0] < 0.5:
-                    TOP = TSHIRT_PARTS
-                else:    
-                    TOP = SHIRT_PARTS
-
-                segments = [TOP, BOTTOM, SHOES_PARTS]
-                segments_colors = [generate_color() for _ in segments]
-
-                for seg, seg_col in zip(segments, segments_colors):
-                    for body_part in seg:
-                        vertex_colors[seg_dict[body_part], :] = seg_col
-
             joints_vertices = get_joints_vertices(coco_joints, vertices, joints_range)
+            
+            # Add random noise to the vertices
+            # vertices += np.random.normal(0, 0.005, vertices.shape)
 
-            tri_mesh = trimesh.Trimesh(vertices, model.faces,
-                                    vertex_colors=vertex_colors)
+            if args.save_default_pose:
+                np.savez("default_body_pose_vertices.npz", vertices=vertices)
+
+            # Generate the tri mesh with texture or coloring
+            if args.not_textured:
+                tri_mesh = get_colored_mesh(vertices, model.faces, args)
+            else:
+                tri_mesh = get_textured_mesh(vertices, texture_path=None, args=args)
+ 
+            if args.uniform_background:
+                scene = pyrender.Scene(bg_color=generate_color())
+            else:
+                scene = pyrender.Scene(bg_color=(255, 255, 255, 255))
+
             mesh = pyrender.Mesh.from_trimesh(tri_mesh)
-
-            scene = pyrender.Scene(bg_color=generate_color())
             scene.add(mesh)
 
             # Add lights
-            light = pyrender.DirectionalLight(color=[1,1,1], intensity=5e2)
+            light = pyrender.DirectionalLight(color=[1,1,1], intensity=3e3)
             for _ in range(5):
                 scene.add(light, pose=random_camera_pose(distance=abs(2*args.camera_distance)))
             
@@ -612,11 +684,12 @@ def main(args):
                     depthmap *= 255
 
                     # Add background
-                    rendered_img_w_bckg = background_image.copy()
-                    depthmap_mask = depthmap > 0
-                    # depthmap_mask = cv2.erode(depthmap_mask.astype(np.uint8), np.ones((3, 3)), iterations=1).astype(bool)
-                    rendered_img_w_bckg[depthmap_mask, :] = rendered_img[depthmap_mask, :]
-                    rendered_img = rendered_img_w_bckg
+                    if not args.uniform_background:
+                        rendered_img_w_bckg = background_image.copy()
+                        depthmap_mask = depthmap > 0
+                        depthmap_mask = cv2.erode(depthmap_mask.astype(np.uint8), np.ones((3, 3)), iterations=1).astype(bool)
+                        rendered_img_w_bckg[depthmap_mask, :] = rendered_img[depthmap_mask, :]
+                        rendered_img = rendered_img_w_bckg
 
                     # Name file differently to avoid confusion
                     if args.plot_gt:
@@ -642,7 +715,6 @@ def main(args):
                     in_image = np.all(vertices_2d < 1024, axis=1) & in_image
                     vertices_2d = vertices_2d[in_image, :]
                     
-
                     joints_vis = get_joints_visibilities(joints_vertices, visibilities)
                     joints_vis = np.all(joints_2d >= 0, axis=1) & joints_vis
                     joints_vis = np.all(joints_2d < 1024, axis=1) & joints_vis
@@ -755,6 +827,10 @@ def main(args):
         gt_filename = os.path.join(args.out_folder, "coco_annotations.json")
         with open(gt_filename, "w") as fp:
             json.dump(gt_coco_dict, fp, indent=2)
+        
+        metadata_filename = os.path.join(args.out_folder, "metadata")
+        with open(metadata_filename, "w") as fp:
+            json.dump(vars(args), fp, indent=2)
 
 
 if __name__ == '__main__':
@@ -818,7 +894,16 @@ if __name__ == '__main__':
                         help='If True, will crop the image by the computed bbox (slightly larger)')
     parser.add_argument('--naked',
                         action="store_true", default=False,
-                        help='If True, humans will have uniform color (no clothes colors)')
+                        help='If True, humans will have uniform color (no clothes colors). Works only with "--not-textured" param')
+    parser.add_argument('--not-textured',
+                        action="store_true", default=False,
+                        help='If True, humans will have naive coloring (no textures)')
+    parser.add_argument('--save-default-pose',
+                        action="store_true", default=False,
+                        help='If True, will save pose with default params. Used for development.')
+    parser.add_argument('--uniform-background',
+                        action="store_true", default=False,
+                        help='If True, will draw background with uniform color')
     # parser.add_argument('--gt-type', default='NONE', type=str,
     #                     choices=['NONE', 'depth', 'openpose', 'cocopose'],
     #                     help='The type of model to load')
