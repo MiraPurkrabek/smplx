@@ -645,7 +645,8 @@ def main(args):
             scene.add(mesh)
 
             # Add lights
-            light = pyrender.DirectionalLight(color=[1,1,1], intensity=3e3)
+            light_intensity = 5e2 if args.not_textured else 3e3
+            light = pyrender.DirectionalLight(color=[1,1,1], intensity=light_intensity)
             for _ in range(5):
                 scene.add(light, pose=random_camera_pose(distance=abs(2*args.camera_distance)))
             
@@ -687,7 +688,7 @@ def main(args):
                     if not args.uniform_background:
                         rendered_img_w_bckg = background_image.copy()
                         depthmap_mask = depthmap > 0
-                        depthmap_mask = cv2.erode(depthmap_mask.astype(np.uint8), np.ones((3, 3)), iterations=1).astype(bool)
+                        # depthmap_mask = cv2.erode(depthmap_mask.astype(np.uint8), np.ones((3, 3)), iterations=1).astype(bool)
                         rendered_img_w_bckg[depthmap_mask, :] = rendered_img[depthmap_mask, :]
                         rendered_img = rendered_img_w_bckg
 
