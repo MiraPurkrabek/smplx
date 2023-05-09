@@ -688,7 +688,7 @@ def main(args):
                     if not args.uniform_background:
                         rendered_img_w_bckg = background_image.copy()
                         depthmap_mask = depthmap > 0
-                        # depthmap_mask = cv2.erode(depthmap_mask.astype(np.uint8), np.ones((3, 3)), iterations=1).astype(bool)
+                        depthmap_mask = cv2.erode(depthmap_mask.astype(np.uint8), np.ones((3, 3)), iterations=1).astype(bool)
                         rendered_img_w_bckg[depthmap_mask, :] = rendered_img[depthmap_mask, :]
                         rendered_img = rendered_img_w_bckg
 
