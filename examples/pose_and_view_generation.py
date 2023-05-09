@@ -162,10 +162,11 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
     # ALPHA - rotation around the sides
     # BETA  - rotation around the top and bottom
     if view_preference is None:
-        alpha_mean = 0
-        alpha_range = np.pi
-        beta_mean = 0
-        beta_range = np.pi
+        # alpha_mean = 0
+        # alpha_range = np.pi
+        # beta_mean = 0
+        # beta_range = np.pi
+        raise ValueError("view_preference must be specified. Use 'random_point_on_sphere' instead.")
     elif view_preference.upper() == "PERIMETER":
         alpha_mean = 0
         alpha_range = np.pi
@@ -211,6 +212,17 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
     return alpha, beta, distance
 
 
+def random_point_on_sphere(distance=2.0):
+    pt = np.random.normal(size=3)
+
+    # Generate vector big enough to avoid precision error
+    while np.linalg.norm(pt) < 0.001:
+        pt = np.random.normal(size=3)
+
+    pt = pt / np.linalg.norm(pt)
+    return pt * distance
+
+
 def polar_to_cartesian(alpha, beta, distance):
     y = distance * np.sin(beta)
     a = distance * np.cos(beta)
@@ -227,8 +239,11 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
     # Convert to radians
     rotation = rotation / 180 * np.pi
 
-    alpha, beta, distance = random_3d_position_polar(distance, view_preference)
-    camera_pos = polar_to_cartesian(alpha, beta, distance)
+    if view_preference is None:
+        camera_pos = random_point_on_sphere(distance)
+    else:
+        alpha, beta, distance = random_3d_position_polar(distance, view_preference)
+        camera_pos = polar_to_cartesian(alpha, beta, distance)
 
     # Default camera_up is head up
     camera_up = np.array([0, 1, 0], dtype=np.float32)
