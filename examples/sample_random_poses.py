@@ -185,6 +185,11 @@ def generate_pose(typical_pose=None, simplicity=5):
         body_pose[0, joints["Left leg"]*3+0] = - np.pi / 2
         body_pose[0, joints["Left shoulder"]*3+2] = - np.pi / 2 * 4/5
         body_pose[0, joints["Right shoulder"]*3+2] = np.pi / 2 * 4/5
+    
+    elif typical_pose.lower() == "stretch":
+        body_pose[0, joints["Torso"]*3+0] = np.pi / 2
+        body_pose[0, joints["Left shoulder"]*3+1] = - np.pi / 2 * 4/5
+        body_pose[0, joints["Right shoulder"]*3+1] = np.pi / 2 * 4/5
 
     return body_pose
 
@@ -601,7 +606,7 @@ def main(args):
                 left_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
                 right_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
             else:
-                body_pose = generate_pose(simplicity=args.pose_simplicity)
+                body_pose = generate_pose(simplicity=args.pose_simplicity, typical_pose="stretch")
                 left_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
                 right_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
 
