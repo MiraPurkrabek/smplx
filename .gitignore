@@ -109,6 +109,8 @@ venv.bak/
 
 models/
 sampled_poses/
+textures/
+images/smplx_original/
 
 *.png
 *.jpg
