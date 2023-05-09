@@ -323,11 +323,10 @@ def main(args):
                     else:
                         img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
                     img_id = int(abs(hash(img_name)))
-
-                    views_dict[img_name] = {"camera_position": camera_position.tolist()}
-                    
                     # For COCO compatibility
                     img_name = "{:d}.jpg".format(img_id)
+
+                    views_dict[img_name] = {"camera_position": camera_position.tolist()}
 
                     visibilities = msh.vertex_visibility(
                         camera = camera_position.tolist(),

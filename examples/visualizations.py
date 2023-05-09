@@ -104,9 +104,12 @@ def draw_pose(img, kpts, joints_vis, draw_style="custom"):
     return img
 
 
-def draw_points_on_sphere(pts, show_axes=True):
+def draw_points_on_sphere(pts, score=None, show_axes=True):
     assert len(pts.shape) == 2
     assert pts.shape[1] == 3
+
+    if score is not None:
+        assert len(score) == pts.shape[0]
 
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
@@ -119,7 +122,15 @@ def draw_points_on_sphere(pts, show_axes=True):
         z_line = np.array([[0, 0], [0, 0], [0, 1]])
         ax.plot(z_line[0, :], z_line[1, :], z_line[2, :], c='b', linewidth=5)
 
-    ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='c', marker='o')
+    if score is not None:
+        score = np.clip(score, 0, 1)
+        # mask = score >= 0
+        # score = score[mask]
+        # pts = pts[mask, :]
+        # print("Score: min={}, max={}".format(np.min(score), np.max(score)))
+        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c=1-score, marker='o', cmap='rainbow')
+    else:
+        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='c', marker='o')
 
     max_value = np.max(np.abs(pts))
     max_value = max(1, max_value)

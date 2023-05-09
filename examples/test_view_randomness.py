@@ -15,6 +15,8 @@ def parse_args():
 def main(args):
 
     pts = []
+    score = []
+    have_score = True
     if args.filepath is None:
         for _ in range(1000):
             _, pt, _ = random_camera_pose(distance=1.5, view_preference=None, return_vectors=True)
@@ -23,9 +25,18 @@ def main(args):
         input_dict = json.load(open(args.filepath, "r"))
         for img_name in input_dict.keys():
             pts.append(input_dict[img_name]["camera_position"])
+            if "oks_score" in input_dict[img_name].keys():
+                score.append(input_dict[img_name]["oks_score"])
+            else:
+                have_score = False
+
     pts = np.array(pts)
+    score = np.array(score).squeeze()
     
-    draw_points_on_sphere(pts)
+    if have_score:
+        draw_points_on_sphere(pts, score=score)
+    else:
+        draw_points_on_sphere(pts)
 
 
 if __name__ == "__main__":
