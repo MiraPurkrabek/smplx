@@ -183,6 +183,8 @@ def main(args):
         ]
     }
 
+    views_dict = {}
+
     print("Generating poses and views...")
 
     # Read the background image from the file
@@ -224,7 +226,7 @@ def main(args):
                 left_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
                 right_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
             else:
-                body_pose = generate_pose(simplicity=args.pose_simplicity, typical_pose="stretch")
+                body_pose = generate_pose(simplicity=args.pose_simplicity, typical_pose=None)
                 left_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
                 right_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
 
@@ -321,6 +323,8 @@ def main(args):
                     else:
                         img_name = "sampled_pose_{:02d}_view_{:02d}.jpg".format(pose_i, view_idx)
                     img_id = int(abs(hash(img_name)))
+
+                    views_dict[img_name] = {"camera_position": camera_position.tolist()}
                     
                     # For COCO compatibility
                     img_name = "{:d}.jpg".format(img_id)
@@ -455,6 +459,10 @@ def main(args):
         metadata_filename = os.path.join(args.out_folder, "metadata")
         with open(metadata_filename, "w") as fp:
             json.dump(vars(args), fp, indent=2)
+
+        views_filename = os.path.join(args.out_folder, "views.json")
+        with open(views_filename, "w") as fp:
+            json.dump(views_dict, fp, indent=2)
 
 
 if __name__ == '__main__':
