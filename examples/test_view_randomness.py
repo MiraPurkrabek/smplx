@@ -13,6 +13,8 @@ def parse_args():
     parser.add_argument("--filepath", type=str, default=None)
     parser.add_argument('--distance', action="store_true", default=False,
                         help='If True, will plot distance from origin instead of position on sphere')
+    parser.add_argument('--heatmap', action="store_true", default=False,
+                        help='If True, will plot 2D heatmap instead of 3D scatter plot')
     return parser.parse_args()
 
 
@@ -30,37 +32,64 @@ def interpolate_sphere(pts, score):
     y = pts[:, 1]
     z = pts[:, 2]
 
-    data_theta = np.arctan2(np.sqrt(x * x + y * y), z)
-    data_phi = np.arctan2(y, x)
+    data_theta = np.arctan2(y, x)
+    data_phi = np.arctan2(np.sqrt(x * x + y * y), z)
     
-    phi = np.linspace(0, 2*np.pi, 200)
-    theta = np.linspace(-np.pi, np.pi, 200)
+    print("Data theta:", np.min(data_theta), np.max(data_theta))
+    print("Data phi:", np.min(data_phi), np.max(data_phi))
+    print("Score:", np.min(score), np.max(score))
+    print("=====================================")
+
+    theta = np.linspace(-np.pi, np.pi, 500)
+    phi = np.linspace(0, np.pi, 250)
     PHI, THETA = np.meshgrid(phi, theta)  # 2D grid for interpolation
     interp = LinearNDInterpolator(list(zip(data_phi, data_theta)), score)
     SCORE = interp(PHI, THETA)
+
+    print("Theta:", np.min(theta), np.max(theta))
+    print("Phi:", np.min(phi), np.max(phi))
+    print("Score:", np.min(SCORE), np.max(SCORE))
 
     # y = radius * np.sin(beta)
     # a = radius * np.cos(beta)
     # x = a * np.sin(alpha)
     # z = a * np.cos(alpha)
-    x = radius * np.cos(THETA) * np.sin(PHI)
-    y = radius * np.sin(THETA) * np.sin(PHI)
-    z = radius * np.cos(PHI)
+    xx = radius * np.cos(THETA) * np.sin(PHI)
+    yy = radius * np.sin(THETA) * np.sin(PHI)
+    zz = radius * np.cos(PHI)
 
-    print(x.shape, y.shape, z.shape, SCORE.shape)
+    # print(x.shape, y.shape, z.shape, SCORE.shape)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    ax.plot_surface(x, y, z, rstride=1, cstride=1, facecolors=plt.cm.jet(SCORE))
-    plt.show()
-
-    
-    # plt.pcolormesh(PHI, THETA, SCORE, shading='auto')
-    # # plt.plot(x, y, "ok", label="input point")
-    # plt.legend()
-    # plt.colorbar()
-    # plt.axis("equal")
+    # fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    # ax.plot_surface(xx, yy, zz, facecolors=plt.cm.jet(SCORE))
     # plt.show()
+    
+
+    significant_points = {
+        "TOP": (np.pi/2, np.pi/2, "ro"),
+        "BOTTOM": (np.pi/2, -np.pi/2, "rx"),
+        "FRONT": (0, 0, "bo"),
+        # "FRONT": (0, np.pi/2),
+        # "FRONT": (0, np.pi),
+        # "FRONT": (0, -np.pi/2),
+        "BACK": (np.pi, 0, "bx"),
+        "LEFT": (np.pi/2, 0, "co"),
+        "RIGHT": (np.pi/2, np.pi, "cx"),
+    }
+
+    plt.pcolormesh(PHI, THETA, SCORE, shading='auto')
+    # plt.plot(data_phi, data_theta, "ok", label="input point")
+    for key, sp in significant_points.items():
+        mkr = sp[2]
+        plt.plot(sp[0], sp[1], mkr, label=key)
+    plt.plot()
+    plt.legend()
+    plt.colorbar()
+    plt.axis("equal")
+    plt.xlabel("phi")
+    plt.ylabel("theta")
+    plt.show()
 
 
 def main(args):
@@ -86,21 +115,18 @@ def main(args):
     score = np.array(score).squeeze()
     score = np.clip(score, 0, 1)
     
-    if args.distance:
-        dist = np.linalg.norm(pts, axis=1)
-        # sort_idx = np.argsort(dist)
-        # pts_sorted = pts[sort_idx, :]
-        # score_sorted = score[sort_idx]
-        # dist_sorted = dist[sort_idx]
-        plt.scatter(dist, score)
-        plt.grid()
-        plt.show()
-    else:
-        if have_score:
-            draw_points_on_sphere(pts, score=score)
+    if have_score:
+        if args.distance:
+            dist = np.linalg.norm(pts, axis=1)
+            plt.scatter(dist, score)
+            plt.grid()
+            plt.show()
+        elif args.heatmap:
+            interpolate_sphere(pts, score)
         else:
-            draw_points_on_sphere(pts)
-        # interpolate_sphere(pts, score)
+            draw_points_on_sphere(pts, score=score)
+    else:
+        draw_points_on_sphere(pts)
 
 
 if __name__ == "__main__":

@@ -219,11 +219,11 @@ def random_point_on_sphere(distance=2.0):
     if distance < 0:
         distance = rnd(0.3, 15.0)
     
-    pt = np.random.uniform(size=3)
+    pt = np.random.uniform(size=3) * np.array([random_sgn(), random_sgn(), random_sgn()])
 
     # Generate vector big enough to avoid precision error
     while np.linalg.norm(pt) < 0.001:
-        pt = np.random.normal(size=3)
+        pt = np.random.normal(size=3) * np.array([random_sgn(), random_sgn(), random_sgn()])
 
     pt = pt / np.linalg.norm(pt)
     return pt * distance
@@ -255,9 +255,9 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
     rotation = rotation / 180 * np.pi
 
 
-    if view_preference is None and distance<0:
-        camera_pos = random_point_in_sphere()
-    elif view_preference is None:
+    # if view_preference is None and distance<0:
+    #     camera_pos = random_point_in_sphere()
+    if view_preference is None:
         camera_pos = random_point_on_sphere(distance)
     else:
         alpha, beta, distance = random_3d_position_polar(distance, view_preference)
