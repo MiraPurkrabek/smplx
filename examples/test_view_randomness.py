@@ -1,7 +1,7 @@
 import argparse
 import json
 import numpy as np
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, interp1d
 import matplotlib.pyplot as plt
 
 from pose_and_view_generation import random_camera_pose
@@ -118,7 +118,17 @@ def main(args):
     if have_score:
         if args.distance:
             dist = np.linalg.norm(pts, axis=1)
+            sort_idx = np.argsort(dist)
+            sorted_dist = dist[sort_idx]
+            sorted_score = score[sort_idx]
+            window_size = 50
+            tmp = np.convolve(sorted_score, np.ones(window_size)/window_size, mode='valid')
+            tmp_x = np.linspace(np.min(sorted_dist), np.max(sorted_dist), len(tmp))
+            f = interp1d(dist, score)
+            x = np.linspace(np.min(dist), np.max(dist), 1000)
+            y = f(x)
             plt.scatter(dist, score)
+            plt.plot(tmp_x, tmp, "r-")
             plt.grid()
             plt.show()
         elif args.heatmap:
