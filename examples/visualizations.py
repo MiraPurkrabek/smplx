@@ -113,13 +113,17 @@ def draw_points_on_sphere(pts, score=None, show_axes=True):
 
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
+    
+    max_value = np.max(np.abs(pts))
+    max_value = max(1, max_value)
 
     if show_axes:
-        x_line = np.array([[0, 1], [0, 0], [0, 0]])
+        axis_size = 1.5*max_value
+        x_line = np.array([[0, axis_size], [0, 0], [0, 0]])
         ax.plot(x_line[0, :], x_line[1, :], x_line[2, :], c='r', linewidth=5)
-        y_line = np.array([[0, 0], [0, 1], [0, 0]])
+        y_line = np.array([[0, 0], [0, axis_size], [0, 0]])
         ax.plot(y_line[0, :], y_line[1, :], y_line[2, :], c='g', linewidth=5)
-        z_line = np.array([[0, 0], [0, 0], [0, 1]])
+        z_line = np.array([[0, 0], [0, 0], [0, axis_size]])
         ax.plot(z_line[0, :], z_line[1, :], z_line[2, :], c='b', linewidth=5)
 
     if score is not None:
@@ -132,8 +136,6 @@ def draw_points_on_sphere(pts, score=None, show_axes=True):
     else:
         ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c='c', marker='o')
 
-    max_value = np.max(np.abs(pts))
-    max_value = max(1, max_value)
     ax.set_xlim(-max_value, max_value)
     ax.set_ylim(-max_value, max_value)
     ax.set_zlim(-max_value, max_value)

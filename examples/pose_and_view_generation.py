@@ -154,7 +154,9 @@ def generate_pose(typical_pose=None, simplicity=5):
 def random_3d_position_polar(distance=2.0, view_preference=None):
     
     if distance < 0:
-        distance = rnd(1.5, 5.0)
+        # distance = rnd(1.5, 5.0)
+        print("Distance must be positive. Using 2.0 instead.")
+        distance = rnd(0.3, 15.0)
     
     # Noise is 20°
     noise_size = 20 / 180 * np.pi
@@ -213,7 +215,11 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
 
 
 def random_point_on_sphere(distance=2.0):
-    pt = np.random.normal(size=3)
+    
+    if distance < 0:
+        distance = rnd(0.3, 15.0)
+    
+    pt = np.random.uniform(size=3)
 
     # Generate vector big enough to avoid precision error
     while np.linalg.norm(pt) < 0.001:
@@ -221,6 +227,15 @@ def random_point_on_sphere(distance=2.0):
 
     pt = pt / np.linalg.norm(pt)
     return pt * distance
+
+
+def random_point_in_sphere(distance_min=0.3, distance_max=15.0):
+    """The rejection method"""
+    scale = distance_max - distance_min
+    pt = (np.random.uniform(size=3) * scale + distance_min) * np.array([random_sgn(), random_sgn(), random_sgn()])
+    while np.linalg.norm(pt) < distance_min or np.linalg.norm(pt) > distance_max:
+        pt = (np.random.uniform(size=3) * scale + distance_min) * np.array([random_sgn(), random_sgn(), random_sgn()])
+    return pt
 
 
 def polar_to_cartesian(alpha, beta, distance):
@@ -239,7 +254,10 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
     # Convert to radians
     rotation = rotation / 180 * np.pi
 
-    if view_preference is None:
+
+    if view_preference is None and distance<0:
+        camera_pos = random_point_in_sphere()
+    elif view_preference is None:
         camera_pos = random_point_on_sphere(distance)
     else:
         alpha, beta, distance = random_3d_position_polar(distance, view_preference)
