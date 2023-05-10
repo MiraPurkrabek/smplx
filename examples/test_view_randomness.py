@@ -35,10 +35,10 @@ def interpolate_sphere(pts, score):
     data_theta = np.arctan2(y, x)
     data_phi = np.arctan2(np.sqrt(x * x + y * y), z)
     
-    print("Data theta:", np.min(data_theta), np.max(data_theta))
-    print("Data phi:", np.min(data_phi), np.max(data_phi))
-    print("Score:", np.min(score), np.max(score))
-    print("=====================================")
+    # print("Data theta:", np.min(data_theta), np.max(data_theta))
+    # print("Data phi:", np.min(data_phi), np.max(data_phi))
+    # print("Score:", np.min(score), np.max(score))
+    # print("=====================================")
 
     theta = np.linspace(-np.pi, np.pi, 500)
     phi = np.linspace(0, np.pi, 250)
@@ -46,9 +46,9 @@ def interpolate_sphere(pts, score):
     interp = LinearNDInterpolator(list(zip(data_phi, data_theta)), score)
     SCORE = interp(PHI, THETA)
 
-    print("Theta:", np.min(theta), np.max(theta))
-    print("Phi:", np.min(phi), np.max(phi))
-    print("Score:", np.min(SCORE), np.max(SCORE))
+    # print("Theta:", np.min(theta), np.max(theta))
+    # print("Phi:", np.min(phi), np.max(phi))
+    # print("Score:", np.min(SCORE), np.max(SCORE))
 
     # y = radius * np.sin(beta)
     # a = radius * np.cos(beta)
