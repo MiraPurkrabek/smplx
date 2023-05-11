@@ -128,7 +128,10 @@ def main(args):
             x = np.linspace(np.min(dist), np.max(dist), 1000)
             y = f(x)
             plt.scatter(dist, score)
+            plt.xlabel("Distance from origin")
+            plt.ylabel("OKS score")
             plt.plot(tmp_x, tmp, "r-")
+            plt.legend(["OKS score", "Moving average"])
             plt.grid()
             plt.show()
         elif args.heatmap:
@@ -136,7 +139,16 @@ def main(args):
         else:
             draw_points_on_sphere(pts, score=score)
     else:
-        draw_points_on_sphere(pts)
+        if args.distance:
+            dist = np.linalg.norm(pts, axis=1)
+            sorted_dist = np.sort(dist)
+            plt.hist(sorted_dist, bins=100)
+            plt.xlabel("Distance from origin")
+            plt.ylabel("Number of points in bin")
+            plt.grid()
+            plt.show()
+        else:
+            draw_points_on_sphere(pts)
 
 
 if __name__ == "__main__":
