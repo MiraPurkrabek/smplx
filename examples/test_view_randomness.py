@@ -1,3 +1,4 @@
+import os
 import argparse
 import json
 import numpy as np
@@ -89,6 +90,12 @@ def interpolate_sphere(pts, score):
     plt.axis("equal")
     plt.xlabel("phi")
     plt.ylabel("theta")
+    plt.title("Interpolated heatmap, average distance = {}".format(radius))
+    plt.savefig(os.path.join(
+        "images",
+        "heatmaps",
+        "heatmap_distance_{:.1f}.png".format(radius)
+    ))
     plt.show()
 
 
