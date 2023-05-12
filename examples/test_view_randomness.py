@@ -5,6 +5,8 @@ import numpy as np
 from scipy.interpolate import LinearNDInterpolator, interp1d
 import matplotlib.pyplot as plt
 
+from train_view_regressor import cartesian_to_spherical
+from test_view_regressor import plot_heatmap
 from pose_and_view_generation import random_camera_pose
 from visualizations import draw_points_on_sphere
 
@@ -13,6 +15,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filepath", type=str, default=None)
     parser.add_argument('--distance', action="store_true", default=False,
+                        help='If True, will plot distance from origin instead of position on sphere')
+    parser.add_argument('--histogram', action="store_true", default=False,
                         help='If True, will plot distance from origin instead of position on sphere')
     parser.add_argument('--heatmap', action="store_true", default=False,
                         help='If True, will plot 2D heatmap instead of 3D scatter plot')
@@ -106,7 +110,7 @@ def main(args):
     have_score = True
     if args.filepath is None:
         have_score = False
-        for _ in range(1000):
+        for _ in range(50000):
             _, pt, _ = random_camera_pose(distance=-1, view_preference=None, return_vectors=True)
             pts.append(pt)
     else:
@@ -131,9 +135,6 @@ def main(args):
             window_size = 50
             tmp = np.convolve(sorted_score, np.ones(window_size)/window_size, mode='valid')
             tmp_x = np.linspace(np.min(sorted_dist), np.max(sorted_dist), len(tmp))
-            f = interp1d(dist, score)
-            x = np.linspace(np.min(dist), np.max(dist), 1000)
-            y = f(x)
             plt.scatter(dist, score)
             plt.xlabel("Distance from origin")
             plt.ylabel("OKS score")
@@ -146,14 +147,33 @@ def main(args):
         else:
             draw_points_on_sphere(pts, score=score)
     else:
-        if args.distance:
+        if args.histogram:
             dist = np.linalg.norm(pts, axis=1)
-            sorted_dist = np.sort(dist)
-            plt.hist(sorted_dist, bins=100)
-            plt.xlabel("Distance from origin")
-            plt.ylabel("Number of points in bin")
-            plt.grid()
+            spherical = cartesian_to_spherical(pts)
+            theta = spherical[:, 1]
+            phi = spherical[:, 2]
+            
+            fig, (ax0, ax1, ax2) = plt.subplots(1, 3)
+
+            # Histogram of distance
+            ax0.hist(dist, bins=100)
+            ax0.set_xlabel("Distance from origin")
+            ax0.set_ylabel("Number of points in bin")
+            ax0.grid()
+
+            # Histogram of theta
+            ax1.hist(theta, bins=100)
+            ax1.set_xlabel("Theta")
+            ax1.grid()
+
+            # Histogram of phi
+            ax2.hist(phi, bins=100)
+            ax2.set_xlabel("Phi")
+            ax2.grid()
+
             plt.show()
+        elif args.heatmap:
+            plot_heatmap(pts)
         else:
             draw_points_on_sphere(pts)
 

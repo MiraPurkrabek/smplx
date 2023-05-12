@@ -215,16 +215,17 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
 
 
 def random_point_on_sphere(distance=2.0):
+    """The projection to the sphere method"""
     
     if distance < 0:
         distance = rnd(0.3, 15.0)
     
-    pt = np.random.uniform(size=3) * np.array([random_sgn(), random_sgn(), random_sgn()])
-
     # Generate vector big enough to avoid precision error
-    while np.linalg.norm(pt) < 0.001:
-        pt = np.random.normal(size=3) * np.array([random_sgn(), random_sgn(), random_sgn()])
+    pt = np.random.normal(size=3)
+    while np.linalg.norm(pt) < 1e-6:
+        pt = np.random.normal(size=3)
 
+    # Normalize to the sphere
     pt = pt / np.linalg.norm(pt)
     return pt * distance
 
