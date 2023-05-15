@@ -34,8 +34,8 @@ from smplx.joint_names import COCO_JOINTS, COCO_SKELETON
 
 from psbody.mesh import Mesh
 
-from pose_and_view_generation import generate_pose, random_camera_pose
-from visualizations import draw_depth, draw_pose
+from smplx.random_pose.pose_and_view_generation import generate_pose, random_camera_pose
+from smplx.random_pose.visualizations import draw_depth, draw_pose
 
 TSHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm"]
 SHIRT_PARTS = ["spine1", "spine2", "leftShoulder", "rightShoulder", "rightArm", "spine", "hips", "leftArm", "leftForeArm", "rightForeArm"]
