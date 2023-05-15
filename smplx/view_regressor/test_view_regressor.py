@@ -53,17 +53,17 @@ def main(args):
     print("=================================")
     y_test_pred = model(keypoints).detach().numpy()
 
-    print("Test positions:")
-    print("min: {}".format(np.min(y_test_pred, axis=0)))
-    print("max: {}".format(np.max(y_test_pred, axis=0)))
-    print("mean: {}".format(np.mean(y_test_pred, axis=0)))
+    # print("Test positions:")
+    # print("min: {}".format(np.min(y_test_pred, axis=0)))
+    # print("max: {}".format(np.max(y_test_pred, axis=0)))
+    # print("mean: {}".format(np.mean(y_test_pred, axis=0)))
     
-    if not is_spherical:
-        test_radius = np.linalg.norm(y_test_pred, axis=1)
-        print("---\nTest radiuses:")
-        print("min: {}".format(np.min(test_radius)))
-        print("max: {}".format(np.max(test_radius)))
-        print("mean: {}".format(np.mean(test_radius)))
+    # if not is_spherical:
+    #     test_radius = np.linalg.norm(y_test_pred, axis=1)
+    #     print("---\nTest radiuses:")
+    #     print("min: {}".format(np.min(test_radius)))
+    #     print("max: {}".format(np.max(test_radius)))
+    #     print("mean: {}".format(np.mean(test_radius)))
 
     if args.plot_3d:
         plot_testing_data(y_test_pred, is_spherical)

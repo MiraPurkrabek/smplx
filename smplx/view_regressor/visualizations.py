@@ -38,7 +38,7 @@ def plot_heatmap(pts, is_spherical=False):
     if is_spherical:
         data_theta = pts[:, 0].squeeze()
         data_phi = pts[:, 1].squeeze()
-        radiuses = np.random.uniform(1, 5, size=data_theta.shape)
+        radiuses = np.ones(data_theta.shape)
     else:
         spherical = c2s(pts)
         radiuses = spherical[:, 0]
@@ -61,16 +61,17 @@ def plot_heatmap(pts, is_spherical=False):
         "RIGHT": (np.pi/2, np.pi, "cx"),        # [-1, 0, 0] in cartesian
     }
 
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
 
-    ax1.hexbin(data_theta, data_phi, gridsize=100)
-    # ax1.hist2d(data_theta, data_phi, bins=100)
-    # plt.scatter(data_phi, data_theta, label="data")
+    # ax1.hexbin(data_theta, data_phi, gridsize=100)
+    ax1.hist2d(data_theta, data_phi, bins=100)
+    
     for key, sp in significant_points.items():
         mkr = sp[2]
         ax1.plot(sp[0], sp[1], mkr, label=key)
-    ax1.legend()
     # plt.colorbar()
+    
+    ax1.legend()
     ax1.axis("equal")
     ax1.set_xlabel("theta")
     ax1.set_ylabel("phi")

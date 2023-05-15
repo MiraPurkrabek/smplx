@@ -48,7 +48,7 @@ def main(args):
     print("Using device: {}".format(device))
 
     # Split into train and test
-    train_idx = np.random.choice(len(keypoints), int(0.95*len(keypoints)), replace=False)
+    train_idx = np.random.choice(len(keypoints), int(0.8*len(keypoints)), replace=False)
     test_idx = np.setdiff1d(np.arange(len(keypoints)), train_idx)
     train_keypoints = torch.from_numpy(keypoints[train_idx, :]).type(torch.float32)
     train_positions = torch.from_numpy(positions[train_idx, :]).type(torch.float32)
@@ -66,7 +66,8 @@ def main(args):
         # criterion = SphericalDistanceLoss()
         criterion = nn.L1Loss()
     else:
-        criterion = nn.MSELoss()
+        # criterion = nn.MSELoss()
+        criterion = nn.L1Loss()
     
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=0.0001)
 
@@ -119,28 +120,28 @@ def main(args):
                 test_loss = criterion(y_test_pred, test_positions)
                 print("---")
                 print("Test loss: {:.4f}".format(test_loss.item()))
-                print("Theta_pred: {:.3f}\t{:.3f}\t{:.3f}".format(
-                    torch.min(y_test_pred[:, 0]).item(),
-                    torch.mean(y_test_pred[:, 0]).item(),
-                    torch.max(y_test_pred[:, 0]).item(),
-                ))
-                print("Phi_pred: {:.3f}\t{:.3f}\t{:.3f}".format(
-                    torch.min(y_test_pred[:, 1]).item(),
-                    torch.mean(y_test_pred[:, 1]).item(),
-                    torch.max(y_test_pred[:, 1]).item(),
-                ))
-                print("---")
-                tp_deg = test_positions# * 180 / np.pi
-                print("Theta_GT: {:03.1f}\t{:03.1f}\t{:03.1f}".format(
-                    torch.min(tp_deg[:, 0]).item(),
-                    torch.mean(tp_deg[:, 0]).item(),
-                    torch.max(tp_deg[:, 0]).item(),
-                ))
-                print("Phi_GT  : {:03.1f}\t{:03.1f}\t{:03.1f}".format(
-                    torch.min(tp_deg[:, 1]).item(),
-                    torch.mean(tp_deg[:, 1]).item(),
-                    torch.max(tp_deg[:, 1]).item(),
-                ))
+                # print("Theta_pred: {:.3f}\t{:.3f}\t{:.3f}".format(
+                #     torch.min(y_test_pred[:, 0]).item(),
+                #     torch.mean(y_test_pred[:, 0]).item(),
+                #     torch.max(y_test_pred[:, 0]).item(),
+                # ))
+                # print("Phi_pred: {:.3f}\t{:.3f}\t{:.3f}".format(
+                #     torch.min(y_test_pred[:, 1]).item(),
+                #     torch.mean(y_test_pred[:, 1]).item(),
+                #     torch.max(y_test_pred[:, 1]).item(),
+                # ))
+                # print("---")
+                # tp_deg = test_positions# * 180 / np.pi
+                # print("Theta_GT: {:03.1f}\t{:03.1f}\t{:03.1f}".format(
+                #     torch.min(tp_deg[:, 0]).item(),
+                #     torch.mean(tp_deg[:, 0]).item(),
+                #     torch.max(tp_deg[:, 0]).item(),
+                # ))
+                # print("Phi_GT  : {:03.1f}\t{:03.1f}\t{:03.1f}".format(
+                #     torch.min(tp_deg[:, 1]).item(),
+                #     torch.mean(tp_deg[:, 1]).item(),
+                #     torch.max(tp_deg[:, 1]).item(),
+                # ))
                 test_loss_log.append(test_loss.item())
             
     # Test the model on new data

@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from data_processing import angular_distance
+
 class RegressionModel(nn.Module):
     def __init__(self, output_size=3):
         super(RegressionModel, self).__init__()
@@ -44,21 +46,9 @@ class SphericalDistanceLoss(nn.Module):
         super(SphericalDistanceLoss, self).__init__()
         self.reduction = reduction
 
-    def forward(self, pred_rad, target_rad):
+    def forward(self, pred, target):
         
-        # Subtract pi/2 from theta to simulate latitude
-        pred_rad[:, 0] = pred_rad[:, 0] - np.pi/2
-        target_rad[:, 0] = target_rad[:, 0] - np.pi/2
-
-        print("---")
-        print("pred", torch.min(pred_rad, dim=0).values, torch.max(pred_rad, dim=0).values)
-        print("target", torch.min(target_rad, dim=0).values, torch.max(target_rad, dim=0).values)
-
-        # Calculate spherical distance
-        delta = pred_rad - target_rad
-        a = torch.sin(delta[:, 0] / 2) ** 2 + torch.cos(pred_rad[:, 0]) * torch.cos(target_rad[:, 0]) * torch.sin(delta[:, 1] / 2) ** 2
-        c = 2 * torch.atan2(torch.sqrt(a), torch.sqrt(1 - a))
-        distance = c
+        distance = angular_distance(pred, target, use_torch=True)
 
         # Apply reduction
         if self.reduction == 'mean':

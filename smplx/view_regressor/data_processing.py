@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import torch
 
 
 def c2s(pts):
@@ -49,6 +50,10 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None):
         kpts = np.array(annot["keypoints"])
         bbox = np.array(annot["bbox"])
 
+        # At least 4 keypoints must be visible
+        vis_mask = kpts[2::3] > 1
+        if np.sum(vis_mask) < 3:
+            continue
 
         keypoints.append(kpts)
         bboxes_xywh.append(bbox)
@@ -78,9 +83,9 @@ def process_keypoints(keypoints, bboxes):
     keypoints = np.reshape(keypoints, (-1, 17, 3))
     
     # Normalize the keypoints to be in the range [0, 1] with respect to the bounding box
-    bboxes = bboxes[:, None, :]
-    keypoints[:, :, 0] = (keypoints[:, :, 0] - bboxes[:, :, 0]) / bboxes[:, :, 2]
-    keypoints[:, :, 1] = (keypoints[:, :, 1] - bboxes[:, :, 1]) / bboxes[:, :, 3]
+    # bboxes = bboxes[:, None, :]
+    # keypoints[:, :, 0] = (keypoints[:, :, 0] - bboxes[:, :, 0]) / bboxes[:, :, 2]
+    # keypoints[:, :, 1] = (keypoints[:, :, 1] - bboxes[:, :, 1]) / bboxes[:, :, 3]
 
     # Remove keypoints with visibility < 2
     visibilities = keypoints[:, :, 2].squeeze()
@@ -90,26 +95,43 @@ def process_keypoints(keypoints, bboxes):
     
     return keypoints
 
-# def cartesian_to_spherical(pts):
-#     # pts: Nx3
-#     x = pts[:, 0]
-#     y = pts[:, 1]
-#     z = pts[:, 2]
 
-#     radius = np.linalg.norm(pts, axis=1)
+def angular_distance(pts1, pts2, use_torch=False):
+    """
+    Compute the angular distance between two points on a unit sphere.
+    """
+    if use_torch:
+        acos = torch.arccos
+        sin = torch.sin
+        cos = torch.cos
+        all = torch.all
+    else:
+        acos = np.arccos
+        sin = np.sin
+        cos = np.cos
+        all = np.all
+    if pts1.shape[1] == 3:
+        theta1, phi1 = pts1[:, 1], pts1[:, 2]
+        theta2, phi2 = pts2[:, 1], pts2[:, 2]
+    else:
+        theta1, phi1 = pts1[:, 0], pts1[:, 1]
+        theta2, phi2 = pts2[:, 0], pts2[:, 1]
 
-#     theta = np.arctan2(y, x)
-#     phi = np.arctan2(np.sqrt(x * x + y * y), z)
+    dist = acos(sin(theta1)*sin(theta2) + cos(theta1)*cos(theta2)*cos(phi1 - phi2))
 
-#     return np.stack([radius, theta, phi], axis=1)
-# def spherical_to_cartesian(pts):
-#     # pts: Nx3
-#     radius = pts[:, 0]
-#     theta = pts[:, 1]
-#     phi = pts[:, 2]
+    assert all(dist >= 0)
+    assert all(dist <= np.pi)
 
-#     x = radius * np.cos(theta) * np.sin(phi)
-#     y = radius * np.sin(theta) * np.sin(phi)
-#     z = radius * np.cos(phi)
+    return dist
 
-#     return np.stack([x, y, z], axis=1)
+
+if __name__ == "__main__":
+
+    pts1 = np.array([[0, 0, -1]], dtype=np.float32)
+    pts2 = np.array([[0, 0, 1]], dtype=np.float32)
+    pts1 = np.random.normal(size = (100000, 3))
+    pts2 = np.random.normal(size = (100000, 3))
+    d = angular_distance(c2s(pts1), c2s(pts2))
+    d = d * 180 / np.pi
+
+    print(np.min(d), np.mean(d), np.max(d))
