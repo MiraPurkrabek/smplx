@@ -1,12 +1,14 @@
 import os
 import argparse
 import json
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
 
 # Define the model
 class RegressionModel(nn.Module):
@@ -17,7 +19,13 @@ class RegressionModel(nn.Module):
             nn.ReLU(),
             nn.Linear(51, 51),
             nn.ReLU(),
+            nn.Linear(51, 51),
+            nn.ReLU(),
+            nn.Linear(51, 51),
+            nn.ReLU(),
             nn.Linear(51, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
             nn.ReLU(),
             nn.Linear(32, 32),
             nn.ReLU(),
@@ -71,7 +79,9 @@ def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions
     # Plot the training and test loss
     if not train_loss_log == [] and not test_loss_log == []:
         ax1.plot(np.arange(epochs), train_loss_log, label="Train loss")
-        ax1.plot(list(range(0, epochs, int(epochs/10))), test_loss_log, label="Test loss")
+        test_epochs = np.arange(0, epochs, int(epochs/10))
+        test_epochs += test_epochs[1]
+        ax1.plot(test_epochs, test_loss_log, label="Test loss")
         ax1.legend()
         ax1.grid()
         ax1.set_xlabel("Epoch")
@@ -86,6 +96,7 @@ def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions
     ax2.set_ylabel("L2 Distance")
     
     fig.suptitle("Training data (lr={:.4f}, epochs={:d})".format(lr, epochs))
+    plt.savefig("training_data.png")
     plt.show()
 
     # Plot the predicted positions
@@ -170,6 +181,10 @@ def main(args):
         positions = cartesian_to_spherical(positions)
         positions = positions[:, 1:]  # Ignore the radius
 
+    # If CUDA available, use it
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("Using device: {}".format(device))
+
     # Split into train and test
     train_idx = np.random.choice(len(keypoints), int(0.95*len(keypoints)), replace=False)
     test_idx = np.setdiff1d(np.arange(len(keypoints)), train_idx)
@@ -196,11 +211,20 @@ def main(args):
     num_epochs = args.epochs
     train_loss_log = []
     test_loss_log = []
+
+    # Move the model and the data to the device
+    model = model.to(device)
+    train_keypoints = train_keypoints.to(device)
+    train_positions = train_positions.to(device)
+    test_keypoints = test_keypoints.to(device)
+    test_positions = test_positions.to(device)
+    # criterion = criterion.to(device)
     
     if args.load:
         model.load_state_dict(torch.load("regression_model.pt"))
     else:
         # Train the model
+        training_start_time = time.time()
         for epoch in range(num_epochs):
             
             # Forward pass
@@ -215,8 +239,13 @@ def main(args):
 
             # Print progress
             if (epoch+1) % int(num_epochs/10) == 0:
+                elapsed_time = time.time() - training_start_time
+                time_per_epoch = elapsed_time / (epoch+1)
+                remaining_time = time_per_epoch * (num_epochs - epoch - 1)
                 print("+---------------------------+")
                 print("Epoch [{}/{}]".format(epoch+1, num_epochs))
+                print("Elapsed time: {:.2f} s ({:.2f} s per epoch)".format(elapsed_time, time_per_epoch))
+                print("Remaining time: {:.2f} s".format(remaining_time))
                 print("Loss: {:.4f}".format(loss.item()))
 
                 y_test_pred = model(test_keypoints)
@@ -227,7 +256,7 @@ def main(args):
     # Test the model on new data
     print("=================================")
     y_test_pred = model(test_keypoints)
-    test_loss = y_test_pred.detach().numpy() - test_positions.detach().numpy()
+    test_loss = y_test_pred.cpu().detach().numpy() - test_positions.cpu().detach().numpy()
     test_dist = np.linalg.norm(test_loss, axis=1)
     print("Test dist:")
     print("min: {:.4f}".format(np.min(test_dist)))
@@ -257,8 +286,8 @@ def main(args):
         args.lr,
         train_loss_log,
         test_loss_log,
-        test_positions,
-        y_test_pred.detach().numpy(),
+        test_positions.cpu().detach().numpy(),
+        y_test_pred.cpu().detach().numpy(),
     )
 
     # Save the model
