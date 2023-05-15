@@ -80,12 +80,12 @@ def process_keypoints(keypoints, bboxes):
     2. Remove keypoints with visibility < 2
     """
 
-    keypoints = np.reshape(keypoints, (-1, 17, 3))
+    keypoints = np.reshape(keypoints, (-1, 17, 3)).astype(np.float32)
     
     # Normalize the keypoints to be in the range [0, 1] with respect to the bounding box
-    # bboxes = bboxes[:, None, :]
-    # keypoints[:, :, 0] = (keypoints[:, :, 0] - bboxes[:, :, 0]) / bboxes[:, :, 2]
-    # keypoints[:, :, 1] = (keypoints[:, :, 1] - bboxes[:, :, 1]) / bboxes[:, :, 3]
+    bboxes = bboxes[:, None, :]
+    keypoints[:, :, 0] = (keypoints[:, :, 0] - bboxes[:, :, 0]) / bboxes[:, :, 2]
+    keypoints[:, :, 1] = (keypoints[:, :, 1] - bboxes[:, :, 1]) / bboxes[:, :, 3]
 
     # Remove keypoints with visibility < 2
     visibilities = keypoints[:, :, 2].squeeze()

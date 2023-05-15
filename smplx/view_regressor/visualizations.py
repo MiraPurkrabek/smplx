@@ -1,6 +1,9 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import cv2
+
+from smplx.joint_names import COCO_JOINTS, COCO_SKELETON
 
 from smplx.view_regressor.data_processing import s2c, c2s
 
@@ -158,3 +161,50 @@ def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions
         ax.plot(z_line[0, :], z_line[1, :], z_line[2, :], c='b', linewidth=5)
 
         plt.show()
+
+
+def visualize_pose(keypoints):
+    if keypoints.ndim < 2:
+        keypoints = keypoints.reshape(-1, 3)
+    
+    x = keypoints[:, 0]
+    y = keypoints[:, 1]
+    
+    assert np.all(x >= 0)
+    assert np.all(y >= 0)
+
+    if np.max(keypoints[:, :2]) <= 1:
+        keypoints[:, :2] *= 512
+    
+    max_w = np.max(x)
+    max_h = np.max(y)
+
+    img = np.zeros((int(max_h)+1, int(max_w)+1, 3), dtype=np.uint8)
+
+    for kpt in keypoints:
+        if kpt[2] < 2:
+            continue
+        
+        img = cv2.circle(img, (int(kpt[0]), int(kpt[1])), 3, (0, 0, 255), -1)
+        
+    for bone in COCO_SKELETON:
+        bone = np.array(bone) - 1
+
+        if keypoints[bone[0], 2] < 2 or keypoints[bone[1], 2] < 2:
+            continue
+        
+        img = cv2.line(
+            img,
+            (int(keypoints[bone[0], 0]), int(keypoints[bone[0], 1])),
+            (int(keypoints[bone[1], 0]), int(keypoints[bone[1], 1])),
+            (0, 255, 0),
+            2
+        )
+
+    return img
+
+
+if __name__ == "__main__":
+    kpts = np.random.uniform(size=(17, 3)) * 640
+    kpts[:, 2] = 2
+    visualize_pose(kpts)
