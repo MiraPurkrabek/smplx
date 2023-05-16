@@ -36,7 +36,7 @@ def plot_testing_data(y_test_pred, is_spherical=False):
     plt.show()
 
 
-def plot_heatmap(pts, is_spherical=False):
+def plot_heatmap(pts, is_spherical=False, return_img=False):
 
     if is_spherical:
         if pts.shape[1] == 2:
@@ -54,8 +54,8 @@ def plot_heatmap(pts, is_spherical=False):
         data_phi = spherical[:, 2].squeeze()
     radius = np.mean(radiuses)
 
-    print("Theta: {:.3f}\t{:.3f}\t{:.3f}".format(np.min(data_theta), np.mean(data_theta), np.max(data_theta)))
-    print("Phi: {:.3f}\t{:.3f}\t{:.3f}".format(np.min(data_phi), np.mean(data_phi), np.max(data_phi)))
+    # print("Theta: {:.3f}\t{:.3f}\t{:.3f}".format(np.min(data_theta), np.mean(data_theta), np.max(data_theta)))
+    # print("Phi: {:.3f}\t{:.3f}\t{:.3f}".format(np.min(data_phi), np.mean(data_phi), np.max(data_phi)))
 
     # Print theta and phi shape
 
@@ -69,33 +69,54 @@ def plot_heatmap(pts, is_spherical=False):
         "RIGHT": (np.pi/2, np.pi, "cx"),        # [-1, 0, 0] in cartesian
     }
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
+    if return_img:
+        fig = plt.figure(figsize=(6.4*2, 4.8*2))
+        plt.hist2d(data_theta, data_phi, bins=100)
+        for key, sp in significant_points.items():
+            mkr = sp[2]
+            plt.plot(sp[0], sp[1], mkr, label=key)
+        plt.axis("equal")
+        plt.axis('off')
 
-    # ax1.hexbin(data_theta, data_phi, gridsize=100)
-    ax1.hist2d(data_theta, data_phi, bins=100)
-    
-    for key, sp in significant_points.items():
-        mkr = sp[2]
-        ax1.plot(sp[0], sp[1], mkr, label=key)
-    # plt.colorbar()
-    
-    ax1.legend()
-    ax1.axis("equal")
-    ax1.set_xlabel("theta")
-    ax1.set_ylabel("phi")
-    plt.suptitle("Distribution of samples, average distance = {:.2f}".format(radius))
-    
-    ax2.hist(radiuses, bins=100)
-    ax2.grid()
-    ax2.set_xlabel("radius")
-    ax2.set_ylabel("count")
-    
-    plt.savefig(os.path.join(
-        "images",
-        "heatmaps",
-        "heatmap_distance_{:.1f}.png".format(radius)
-    ))
-    plt.show()
+        # Remove the huge white borders
+        plt.margins(0)
+        plt.tight_layout(pad=0)
+
+        fig.canvas.draw()
+        image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        plt.close(fig)
+
+        return image_from_plot
+
+    else:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
+
+        # ax1.hexbin(data_theta, data_phi, gridsize=100)
+        ax1.hist2d(data_theta, data_phi, bins=100)
+        
+        for key, sp in significant_points.items():
+            mkr = sp[2]
+            ax1.plot(sp[0], sp[1], mkr, label=key)
+        # plt.colorbar()
+        
+        ax1.legend()
+        ax1.axis("equal")
+        ax1.set_xlabel("theta")
+        ax1.set_ylabel("phi")
+        plt.suptitle("Distribution of samples, average distance = {:.2f}".format(radius))
+        
+        ax2.hist(radiuses, bins=100)
+        ax2.grid()
+        ax2.set_xlabel("radius")
+        ax2.set_ylabel("count")
+        
+        plt.savefig(os.path.join(
+            "images",
+            "heatmaps",
+            "heatmap_distance_{:.1f}.png".format(radius)
+        ))
+        plt.show()
 
 
 def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions, y_test_pred, spherical=False):

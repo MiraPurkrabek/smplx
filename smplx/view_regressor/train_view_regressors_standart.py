@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from torch.utils.tensorboard import SummaryWriter
 
 from model import RegressionModel, SphericalDistanceLoss
-from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c
-from visualizations import plot_training_data
+from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance
+from visualizations import plot_training_data, plot_heatmap
 
 def parse_args(): 
     parser = argparse.ArgumentParser()
@@ -32,9 +32,13 @@ def parse_args():
     parser.add_argument('--test-interval', type=int, default=10)
     parser.add_argument('--train-split', type=float, default=0.8)
     parser.add_argument('--spherical-output', action="store_true", default=False,
+                        help='If True, will train the regressor on spherical coordinates with the radius')
+    parser.add_argument('--flat-output', action="store_true", default=False,
                         help='If True, will train the regressor on spherical coordinates ignoring the radius')
     parser.add_argument('--loss', type=str, default="MSE",
                         help='Loss function. Known values: MSE, L1, Spherical')
+    parser.add_argument('--distance', type=str, default="Euclidean",
+                        help='Distance function. Known values: Euclidean, Spherical. If Spherical adn 3d output, will ignore the radius.')
     parser.add_argument('--load', action="store_true", default=False,
                         help='If True, will load the model from the checkpoint file')
     parser.add_argument('--cpu', action="store_true", default=False,
@@ -57,6 +61,9 @@ def main(args):
     
     if args.spherical_output:
         positions = c2s(positions)
+    elif args.flat_output:
+        positions = c2s(positions)
+        positions = positions[:, 1:]
 
     # If CUDA available, use it
     if args.cpu:
@@ -101,13 +108,16 @@ def main(args):
             criterion = SphericalDistanceLoss()
     else:
         raise ValueError("Unknown loss function: {}".format(args.loss))
-
+    
+    if not args.distance.upper() in ["EUCLIDEAN", "SPHERICAL"]:
+        raise ValueError("Unknown distance function: {}".format(args.distance))
+    
     # Print the number of parameters
     print('Number of parameters: {}'.format(model.count_parameters()))
 
     # Training loop
     writer = SummaryWriter(
-        log_dir=os.path.join(args.workdir, "tensorboar_logs"),
+        log_dir=os.path.join(args.workdir, "tensorboard_logs"),
     )
     start_time = time.time()
     for epoch in tqdm(range(args.epochs)):
@@ -130,8 +140,31 @@ def main(args):
             with torch.no_grad():
                 for batch_x, batch_y in test_dataloader:
                     y_pred = model(batch_x.to(device))
+                    
+                    # Log the loss
                     loss = criterion(y_pred, batch_y.to(device))
                     writer.add_scalar('Loss/test', loss.item(), epoch)
+
+                    # Log the distance
+                    if args.distance.upper() == "EUCLIDEAN":
+                        test_distance = np.linalg.norm(y_pred.cpu().numpy() - batch_y.cpu().numpy(), axis=1)
+                    elif args.distance.upper() == "SPHERICAL":
+                        test_distance = angular_distance(y_pred.cpu().numpy(), batch_y.cpu().numpy())
+                    writer.add_histogram(
+                        'Test distance/test',
+                        test_distance,
+                        global_step = epoch,
+                    )
+
+                    # Log the PDF (probability density function)
+                    test_pdf = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True)
+                    test_pdf = np.array(test_pdf).astype(np.uint8).transpose(2, 0, 1)
+                    writer.add_image(
+                        "Test PDF/test",
+                        test_pdf,
+                        global_step = epoch,
+                    )
+
         
         # Print progress
         if args.verbose and (epoch+1) % 10 == 0:
@@ -143,9 +176,31 @@ def main(args):
     with torch.no_grad():
         for batch_x, batch_y in test_dataloader:
             y_pred = model(batch_x.to(device))
+
+            # Log the loss
             loss = criterion(y_pred, batch_y.to(device))
             writer.add_scalar('Loss/test', loss.item(), epoch)
-            print('Test loss: {:.4f}'.format(loss.item()))
+            
+            # Log the distance
+            if args.distance.upper() == "EUCLIDEAN":
+                test_distance = np.linalg.norm(y_pred.cpu().numpy() - batch_y.cpu().numpy(), axis=1)
+            elif args.distance.upper() == "SPHERICAL":
+                test_distance = angular_distance(y_pred.cpu().numpy(), batch_y.cpu().numpy())
+            writer.add_histogram(
+                'Test distance/test',
+                test_distance,
+                global_step = epoch,
+            )
+
+            # Log the PDF (probability density function)
+            test_pdf = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True)
+            test_pdf = np.array(test_pdf).astype(np.uint8).transpose(2, 0, 1)
+            writer.add_image(
+                "Test PDF/test",
+                test_pdf,
+                global_step = epoch,
+            )
+            
 
     # Save the model
     model_filename = os.path.join(args.workdir, "view_regressor.pth")
