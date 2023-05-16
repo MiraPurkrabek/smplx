@@ -118,3 +118,5 @@ images/smplx_original/
 
 *.pt
 *.pth
+
+*_workdir/
