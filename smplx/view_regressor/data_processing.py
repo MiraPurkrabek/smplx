@@ -94,8 +94,15 @@ def process_keypoints(keypoints, bboxes):
     # Remove the visibility flag from the keypoints
     keypoints = keypoints[:, :, :2]
 
+    print("Keypoints shape:", keypoints.shape)
+
+    # Stack bbox width and height to the keypoints
+    keypoints = np.concatenate([keypoints, bboxes[:, :, 2:]], axis=1)
+    print("Keypoints shape:", keypoints.shape)
+
     # Reshape the keypoints to be a 1D array
-    keypoints = np.reshape(keypoints, (-1, 2*17))
+    keypoints = np.reshape(keypoints, (-1, 2*17 + 2))
+    print("Keypoints shape:", keypoints.shape)
     
     return keypoints
 

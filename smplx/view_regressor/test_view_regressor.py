@@ -31,6 +31,8 @@ def main(args):
     keypoints, bboxes_xywh, image_ids = load_data_from_coco_file(args.coco_filepath)
     keypoints = process_keypoints(keypoints, bboxes_xywh)
 
+    input_size = keypoints.shape[1]
+
     keypoints = torch.from_numpy(keypoints).float()
 
     # If the number of images is specified, only use that many random images
@@ -41,11 +43,11 @@ def main(args):
 
     # Define the model, loss function, and optimizer
     try:
-        model = RegressionModel(output_size = 3)
+        model = RegressionModel(input_size=input_size, output_size = 3)
         model.load_state_dict(torch.load(args.load_from))
-        is_spherical = False
+        is_spherical = True
     except RuntimeError:
-        model = RegressionModel(output_size = 2)
+        model = RegressionModel(input_size=input_size, output_size = 2)
         model.load_state_dict(torch.load(args.load_from))
         is_spherical = True
 

@@ -39,9 +39,14 @@ def plot_testing_data(y_test_pred, is_spherical=False):
 def plot_heatmap(pts, is_spherical=False):
 
     if is_spherical:
-        data_theta = pts[:, 0].squeeze()
-        data_phi = pts[:, 1].squeeze()
-        radiuses = np.ones(data_theta.shape)
+        if pts.shape[1] == 2:
+            data_theta = pts[:, 0].squeeze()
+            data_phi = pts[:, 1].squeeze()
+            radiuses = np.ones(data_theta.shape)
+        else:
+            radiuses = pts[:, 0].squeeze()
+            data_theta = pts[:, 1].squeeze()
+            data_phi = pts[:, 2].squeeze()
     else:
         spherical = c2s(pts)
         radiuses = spherical[:, 0]
@@ -93,15 +98,15 @@ def plot_heatmap(pts, is_spherical=False):
     plt.show()
 
 
-def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions, y_test_pred):
+def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions, y_test_pred, spherical=False):
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
     
     # Plot the training and test loss
     if not train_loss_log == [] and not test_loss_log == []:
         ax1.plot(np.arange(epochs), train_loss_log, label="Train loss")
-        test_epochs = np.arange(0, epochs, int(epochs/10))
-        test_epochs += test_epochs[1]
+        test_epochs = np.linspace(0, epochs-1, len(test_loss_log))
+        # test_epochs += test_epochs[1]
         ax1.plot(test_epochs, test_loss_log, label="Test loss")
         ax1.legend()
         ax1.grid()
@@ -118,6 +123,8 @@ def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions
         dlat = phi_pos - phi_y
         a = np.sin(dlat/2.0)**2 + np.cos(phi_pos) * np.cos(phi_y) * np.sin(dlon/2.0)**2
         test_dist = 2 * np.arcsin(np.sqrt(a))
+    elif spherical:
+        test_dist = np.linalg.norm(s2c(test_positions) - s2c(y_test_pred), axis=1)
     else:
         test_dist = np.linalg.norm(test_positions - y_test_pred, axis=1)
     sorted_test_dist = np.sort(test_dist)

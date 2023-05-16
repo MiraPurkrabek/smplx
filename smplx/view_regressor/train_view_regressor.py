@@ -41,14 +41,14 @@ def main(args):
 
     if args.spherical_input:
         positions = c2s(positions)
-        positions = positions[:, 1:]  # Ignore the radius
+        # positions = positions[:, 1:]  # Ignore the radius
 
     # If CUDA available, use it
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Using device: {}".format(device))
 
     # Split into train and test
-    train_idx = np.random.choice(len(keypoints), int(0.9*len(keypoints)), replace=False)
+    train_idx = np.random.choice(len(keypoints), int(0.8*len(keypoints)), replace=False)
     test_idx = np.setdiff1d(np.arange(len(keypoints)), train_idx)
     train_keypoints = torch.from_numpy(keypoints[train_idx, :]).type(torch.float32)
     train_positions = torch.from_numpy(positions[train_idx, :]).type(torch.float32)
@@ -61,7 +61,7 @@ def main(args):
     input_size = train_keypoints.shape[1]
     model = RegressionModel(
         input_size = input_size,
-        output_size = 2 if args.spherical_input else 3,
+        output_size = 3 if args.spherical_input else 3,
     )
 
     if args.spherical_input:
@@ -108,7 +108,7 @@ def main(args):
             train_loss_log.append(loss.item())
 
             # Print progress
-            if (epoch+1) % int(num_epochs/10) == 0:
+            if (epoch+1) % int(num_epochs/10) == 0 or epoch == 0:
                 elapsed_time = time.time() - training_start_time
                 time_per_epoch = elapsed_time / (epoch+1)
                 remaining_time = time_per_epoch * (num_epochs - epoch - 1)
@@ -122,28 +122,6 @@ def main(args):
                 test_loss = criterion(y_test_pred, test_positions)
                 print("---")
                 print("Test loss: {:.4f}".format(test_loss.item()))
-                # print("Theta_pred: {:.3f}\t{:.3f}\t{:.3f}".format(
-                #     torch.min(y_test_pred[:, 0]).item(),
-                #     torch.mean(y_test_pred[:, 0]).item(),
-                #     torch.max(y_test_pred[:, 0]).item(),
-                # ))
-                # print("Phi_pred: {:.3f}\t{:.3f}\t{:.3f}".format(
-                #     torch.min(y_test_pred[:, 1]).item(),
-                #     torch.mean(y_test_pred[:, 1]).item(),
-                #     torch.max(y_test_pred[:, 1]).item(),
-                # ))
-                # print("---")
-                # tp_deg = test_positions# * 180 / np.pi
-                # print("Theta_GT: {:03.1f}\t{:03.1f}\t{:03.1f}".format(
-                #     torch.min(tp_deg[:, 0]).item(),
-                #     torch.mean(tp_deg[:, 0]).item(),
-                #     torch.max(tp_deg[:, 0]).item(),
-                # ))
-                # print("Phi_GT  : {:03.1f}\t{:03.1f}\t{:03.1f}".format(
-                #     torch.min(tp_deg[:, 1]).item(),
-                #     torch.mean(tp_deg[:, 1]).item(),
-                #     torch.max(tp_deg[:, 1]).item(),
-                # ))
                 test_loss_log.append(test_loss.item())
             
     # Test the model on new data
@@ -181,6 +159,7 @@ def main(args):
         test_loss_log,
         test_positions.cpu().detach().numpy(),
         y_test_pred.cpu().detach().numpy(),
+        args.spherical_input,
     )
 
     # Save the model
