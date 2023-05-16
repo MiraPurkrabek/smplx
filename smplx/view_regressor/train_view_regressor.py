@@ -15,7 +15,7 @@ from visualizations import plot_training_data
 def parse_args(): 
     parser = argparse.ArgumentParser()
     parser.add_argument("folder", type=str)
-    parser.add_argument('--views-filename', type=str, default="views_w_oks.json",
+    parser.add_argument('--views-filename', type=str, default="views.json",
                         help='Filename of the views file')
     parser.add_argument('--coco-filename', type=str, default="person_keypoints_val2017.json",
                         help='Filename of the coco annotations file')
@@ -23,7 +23,7 @@ def parse_args():
                         help='Number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate for the optimizer')
-    parser.add_argument('--spherical', action="store_true", default=False,
+    parser.add_argument('--spherical-input', action="store_true", default=False,
                         help='If True, will train the regressor on spherical coordinates ignoring the radius')
     parser.add_argument('--load', action="store_true", default=False,
                         help='If True, will load the model from the checkpoint file')
@@ -39,7 +39,7 @@ def main(args):
     keypoints, bboxes_xywh, image_ids, positions = load_data_from_coco_file(coco_filepath, views_filepath)
     keypoints = process_keypoints(keypoints, bboxes_xywh)
 
-    if args.spherical:
+    if args.spherical_input:
         positions = c2s(positions)
         positions = positions[:, 1:]  # Ignore the radius
 
@@ -48,7 +48,7 @@ def main(args):
     print("Using device: {}".format(device))
 
     # Split into train and test
-    train_idx = np.random.choice(len(keypoints), int(0.8*len(keypoints)), replace=False)
+    train_idx = np.random.choice(len(keypoints), int(0.9*len(keypoints)), replace=False)
     test_idx = np.setdiff1d(np.arange(len(keypoints)), train_idx)
     train_keypoints = torch.from_numpy(keypoints[train_idx, :]).type(torch.float32)
     train_positions = torch.from_numpy(positions[train_idx, :]).type(torch.float32)
@@ -58,16 +58,18 @@ def main(args):
     test_images = image_ids[test_idx]
 
     # Define the model, loss function, and optimizer
+    input_size = train_keypoints.shape[1]
     model = RegressionModel(
-        output_size = 2 if args.spherical else 3,
+        input_size = input_size,
+        output_size = 2 if args.spherical_input else 3,
     )
 
-    if args.spherical:
+    if args.spherical_input:
         # criterion = SphericalDistanceLoss()
         criterion = nn.L1Loss()
     else:
-        # criterion = nn.MSELoss()
-        criterion = nn.L1Loss()
+        criterion = nn.MSELoss()
+        # criterion = nn.L1Loss()
     
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=0.0001)
 
@@ -153,7 +155,7 @@ def main(args):
     print("min: {:.4f}".format(np.min(test_dist)))
     print("max: {:.4f}".format(np.max(test_dist)))
     print("mean: {:.4f}".format(np.mean(test_dist)))
-    if args.spherical:
+    if args.spherical_input:
         angle_dist = np.linalg.norm(test_loss[:, 1:], axis=1)
         print("---\nTest dist (last two coordinates):")
         print("min: {:.4f}".format(np.min(angle_dist)))

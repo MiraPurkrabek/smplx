@@ -5,10 +5,10 @@ import torch.nn as nn
 from data_processing import angular_distance
 
 class RegressionModel(nn.Module):
-    def __init__(self, output_size=3):
+    def __init__(self, input_size=51, output_size=3):
         super(RegressionModel, self).__init__()
         self.layers = nn.Sequential(
-            nn.Linear(51, 51),
+            nn.Linear(input_size, 51),
             nn.ReLU(),
             nn.Linear(51, 51),
             nn.ReLU(),

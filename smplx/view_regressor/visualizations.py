@@ -15,7 +15,7 @@ def plot_testing_data(y_test_pred, is_spherical=False):
         y_test_pred = s2c(y_test_pred)
 
     # Plot the predicted positions
-    fig = plt.figure()
+    fig = plt.figure(figsize=(6.4*2, 4.8*2))
     ax = fig.add_subplot(111, projection='3d')
     ax.scatter(y_test_pred[:, 0], y_test_pred[:, 1], y_test_pred[:, 2], label="Predicted positions (n={:d})".format(len(y_test_pred)))
 
@@ -95,7 +95,7 @@ def plot_heatmap(pts, is_spherical=False):
 
 def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions, y_test_pred):
     
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
     
     # Plot the training and test loss
     if not train_loss_log == [] and not test_loss_log == []:
@@ -135,7 +135,7 @@ def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions
     if test_positions.shape[1] > 2:
 
         # Plot the predicted positions
-        fig = plt.figure()
+        fig = plt.figure(figsize=(6.4*2, 4.8*2))
         ax = fig.add_subplot(111, projection='3d')
         # ax.scatter(test_positions[:, 0], test_positions[:, 1], test_positions[:, 2], label="True positions")
         # ax.scatter(y_test_pred[:, 0], y_test_pred[:, 1], y_test_pred[:, 2], label="Predicted positions")
@@ -175,9 +175,11 @@ def visualize_pose(keypoints):
 
     if np.max(keypoints[:, :2]) <= 1:
         keypoints[:, :2] *= 512
-    
-    max_w = np.max(x)
-    max_h = np.max(y)
+        max_w = 512
+        max_h = 512
+    else:
+        max_w = np.max(x)
+        max_h = np.max(y)
 
     img = np.zeros((int(max_h)+1, int(max_w)+1, 3), dtype=np.uint8)
 

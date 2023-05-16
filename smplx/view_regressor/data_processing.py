@@ -91,7 +91,11 @@ def process_keypoints(keypoints, bboxes):
     visibilities = keypoints[:, :, 2].squeeze()
     keypoints[visibilities < 2, :] = 0
 
-    keypoints = np.reshape(keypoints, (-1, 51))
+    # Remove the visibility flag from the keypoints
+    keypoints = keypoints[:, :, :2]
+
+    # Reshape the keypoints to be a 1D array
+    keypoints = np.reshape(keypoints, (-1, 2*17))
     
     return keypoints
 
