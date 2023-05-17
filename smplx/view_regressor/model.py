@@ -9,24 +9,13 @@ class RegressionModel(nn.Module):
         super(RegressionModel, self).__init__()
         self.layers = nn.Sequential(
             nn.Linear(input_size, 51),
+            nn.BatchNorm1d(51),
             nn.ReLU(),
-            # nn.Linear(51, 51),
-            # nn.ReLU(),
-            # nn.Linear(51, 51),
-            # nn.ReLU(),
-            # nn.Linear(51, 51),
-            # nn.ReLU(),
             nn.Linear(51, 32),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
-            # nn.Linear(32, 32),
-            # nn.ReLU(),
-            # nn.Linear(32, 32),
-            # nn.ReLU(),
-            # nn.Linear(32, 32),
-            # nn.ReLU(),
-            # nn.Linear(32, 32),
-            # nn.ReLU(),
             nn.Linear(32, 16),
+            nn.BatchNorm1d(16),
             nn.ReLU(),
             nn.Linear(16, output_size)
         )

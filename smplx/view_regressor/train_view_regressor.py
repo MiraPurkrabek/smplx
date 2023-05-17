@@ -31,6 +31,8 @@ def parse_args():
                         help='Number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate for the optimizer')
+    parser.add_argument('--weight-decay', type=float, default=0.0,
+                        help='Weight decay for the optimizer')
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--test-interval', type=int, default=10)
     parser.add_argument('--train-split', type=float, default=0.8)
@@ -111,11 +113,15 @@ def main(args):
     keypoints, bboxes_xywh, image_ids, positions = load_data_from_coco_file(coco_filepath, views_filepath)
     keypoints = process_keypoints(keypoints, bboxes_xywh)    
     
+
     if args.spherical_output:
         positions = c2s(positions)
+        if args.flat_output:
+            positions = positions[:, 1:]
     elif args.flat_output:
         positions = c2s(positions)
-        positions = positions[:, 1:]
+        positions = positions[:, 1:]    # Remove the radius
+        positions = s2c(positions)
 
     # If CUDA available, use it
     if args.cpu:
@@ -146,7 +152,7 @@ def main(args):
 
     # Define the model, loss function, and optimizer
     model = RegressionModel(input_size=input_size, output_size=output_size).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
     if args.loss.upper() == "MSE":
         criterion = nn.MSELoss()
@@ -158,6 +164,7 @@ def main(args):
             warnings.warn("Spherical loss function used with cartesian output. Regressing to the L1 loss")
         else:
             criterion = SphericalDistanceLoss()
+            # control_loss = SphericalDistanceLoss(reduction="none")
     else:
         raise ValueError("Unknown loss function: {}".format(args.loss))
     
@@ -174,20 +181,28 @@ def main(args):
     )
     start_time = time.time()
     for epoch in tqdm(range(args.epochs), ascii=True):
+        losses = []
         for batch_x, batch_y in train_dataloader:
             
             # Forward pass
             y_pred = model(batch_x.to(device))
+            # print(y_pred[0, :], batch_y[0, :])
             loss = criterion(y_pred, batch_y.to(device))
-            
+            # print(control_loss(y_pred, batch_y.to(device)))
+            # print(loss.item())
+
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.001)
             optimizer.step()
 
-            # Log the loss
-            writer.add_scalar('Loss/train', loss.item(), epoch)
+            # Save the loss for later averaging
+            losses.append(loss.item())
 
+        # Log the loss
+        writer.add_scalar('Loss/train', np.mean(losses), epoch)
+        
         # Test the model
         if epoch % args.test_interval == 0:
             test_model(
@@ -201,7 +216,7 @@ def main(args):
             )
         
         # Print progress
-        if args.verbose and (epoch+1) % 10 == 0:
+        if args.verbose and (epoch) % args.test_interval == 0:
             elapsed_time = time.time() - start_time
             remaining_time = elapsed_time / (epoch+1) * (args.epochs - epoch - 1)
             print('Epoch [{:5d}/100]\tLoss: {:7.4f}\tElapsed: {:5.2f} s\tRemaining: {:5.2f} s'.format(epoch+1, loss.item(), elapsed_time, remaining_time))

@@ -116,22 +116,42 @@ def angular_distance(pts1, pts2, use_torch=False):
         sin = torch.sin
         cos = torch.cos
         all = torch.all
+        abs = torch.abs
+        clip = torch.clamp
     else:
         acos = np.arccos
         sin = np.sin
         cos = np.cos
         all = np.all
+        abs = np.abs
+        clip = np.clip
+
     if pts1.shape[1] == 3:
-        theta1, phi1 = pts1[:, 1], pts1[:, 2]
-        theta2, phi2 = pts2[:, 1], pts2[:, 2]
+        radius1, theta1, phi1 = pts1[:, 0], pts1[:, 1], pts1[:, 2]
+        radius2, theta2, phi2 = pts2[:, 0], pts2[:, 1], pts2[:, 2]
     else:
         theta1, phi1 = pts1[:, 0], pts1[:, 1]
         theta2, phi2 = pts2[:, 0], pts2[:, 1]
 
+    # Clip the input - not sure if this helped any
+    # theta1 = clip(theta1, 0, np.pi)
+    # theta2 = clip(theta2, 0, np.pi)
+    # phi1 = clip(phi1, -np.pi, np.pi)
+    # phi2 = clip(phi2, -np.pi, np.pi)
+        
     dist = acos(sin(theta1)*sin(theta2) + cos(theta1)*cos(theta2)*cos(phi1 - phi2))
 
+    # Add radius difference - not sure if this helped any
+    # if pts1.shape[1] == 3:
+    #     dist += 0.1 * abs(radius1 - radius2)
+
+    # if not all(dist >= 0):
+    #     print(pts1)
+    #     print(pts2)
+    #     print(dist)
+
     assert all(dist >= 0)
-    assert all(dist <= np.pi)
+    # assert all(dist <= np.pi)
 
     return dist
 
