@@ -2,15 +2,18 @@ import os
 import argparse
 import time
 import numpy as np
+import warnings
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset, random_split
+from torch.utils.tensorboard import SummaryWriter
 
 from model import RegressionModel, SphericalDistanceLoss
-from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c
-from visualizations import plot_training_data
-
+from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance
+from visualizations import plot_training_data, plot_heatmap
 
 def parse_args(): 
     parser = argparse.ArgumentParser()
@@ -19,154 +22,198 @@ def parse_args():
                         help='Filename of the views file')
     parser.add_argument('--coco-filename', type=str, default="person_keypoints_val2017.json",
                         help='Filename of the coco annotations file')
+    parser.add_argument('--workdir', type=str, default="view_regressor_workdir",
+                        help='Workdir where to save the model and the logs')
     parser.add_argument('--epochs', type=int, default=100,
                         help='Number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate for the optimizer')
-    parser.add_argument('--spherical-input', action="store_true", default=False,
+    parser.add_argument('--batch-size', type=int, default=1024)
+    parser.add_argument('--test-interval', type=int, default=10)
+    parser.add_argument('--train-split', type=float, default=0.8)
+    parser.add_argument('--spherical-output', action="store_true", default=False,
+                        help='If True, will train the regressor on spherical coordinates with the radius')
+    parser.add_argument('--flat-output', action="store_true", default=False,
                         help='If True, will train the regressor on spherical coordinates ignoring the radius')
+    parser.add_argument('--loss', type=str, default="MSE",
+                        help='Loss function. Known values: MSE, L1, Spherical')
+    parser.add_argument('--distance', type=str, default="Euclidean",
+                        help='Distance function. Known values: Euclidean, Spherical. If Spherical adn 3d output, will ignore the radius.')
     parser.add_argument('--load', action="store_true", default=False,
                         help='If True, will load the model from the checkpoint file')
+    parser.add_argument('--cpu', action="store_true", default=False,
+                        help='Will force CPU computation')
+    parser.add_argument('--verbose', action="store_true", default=False,
+                        help='Will print loss to the console')
     
     return parser.parse_args()
 
 
+def test_model(args, model, dataloader, device, criterion, epoch, writer):
+    with torch.no_grad():
+        for batch_x, batch_y in dataloader:
+            y_pred = model(batch_x.to(device))
+            
+            # Log the loss
+            loss = criterion(y_pred, batch_y.to(device))
+            writer.add_scalar('Loss/test', loss.item(), epoch)
+
+            # Log the distance
+            if args.distance.upper() == "EUCLIDEAN":
+                test_distance = np.linalg.norm(y_pred.cpu().numpy() - batch_y.cpu().numpy(), axis=1)
+            elif args.distance.upper() == "SPHERICAL":
+                test_distance = angular_distance(y_pred.cpu().numpy(), batch_y.cpu().numpy())
+            writer.add_histogram(
+                'Test distance/test',
+                test_distance,
+                global_step = epoch,
+            )
+
+            # Log the histogram of radius
+            if args.spherical_output:
+                test_radius = y_pred[:, 0].cpu().numpy()
+            else:
+                test_radius = np.linalg.norm(y_pred.cpu().numpy(), axis=1)
+            writer.add_histogram(
+                'Test radius/test',
+                test_radius,
+                global_step = epoch,
+            )
+
+            # Log the PDF (probability density function)
+            test_pdf = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True)
+            test_pdf = np.array(test_pdf).astype(np.uint8).transpose(2, 0, 1)
+            writer.add_image(
+                "Test PDF/test",
+                test_pdf,
+                global_step = epoch,
+            )
+
+
 def main(args):
+
+    os.makedirs(args.workdir, exist_ok=True)
+
     views_filepath = os.path.join(args.folder, args.views_filename)
     coco_filepath = os.path.join(args.folder, args.coco_filename)
     
     # Load the data
     keypoints, bboxes_xywh, image_ids, positions = load_data_from_coco_file(coco_filepath, views_filepath)
-    keypoints = process_keypoints(keypoints, bboxes_xywh)
-
-    if args.spherical_input:
+    keypoints = process_keypoints(keypoints, bboxes_xywh)    
+    
+    if args.spherical_output:
         positions = c2s(positions)
-        # positions = positions[:, 1:]  # Ignore the radius
+    elif args.flat_output:
+        positions = c2s(positions)
+        positions = positions[:, 1:]
 
     # If CUDA available, use it
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    if args.cpu:
+        device = torch.device("cpu")
+    else:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Using device: {}".format(device))
 
-    # Split into train and test
-    train_idx = np.random.choice(len(keypoints), int(0.8*len(keypoints)), replace=False)
-    test_idx = np.setdiff1d(np.arange(len(keypoints)), train_idx)
-    train_keypoints = torch.from_numpy(keypoints[train_idx, :]).type(torch.float32)
-    train_positions = torch.from_numpy(positions[train_idx, :]).type(torch.float32)
-    train_images = image_ids[train_idx]
-    test_keypoints = torch.from_numpy(keypoints[test_idx, :]).type(torch.float32)
-    test_positions = torch.from_numpy(positions[test_idx, :]).type(torch.float32)
-    test_images = image_ids[test_idx]
+    input_size = keypoints.shape[1]
+    output_size = positions.shape[1]
 
-    # Define the model, loss function, and optimizer
-    input_size = train_keypoints.shape[1]
-    model = RegressionModel(
-        input_size = input_size,
-        output_size = 3 if args.spherical_input else 3,
+    # Create a DataLoader
+    dataset = TensorDataset(
+        torch.from_numpy(keypoints).float(),
+        torch.from_numpy(positions).float(),
     )
 
-    if args.spherical_input:
-        # criterion = SphericalDistanceLoss()
-        criterion = nn.L1Loss()
-    else:
+    # Split the data to the training and testing sets
+    train_size = int(args.train_split * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=train_size if args.batch_size <= 0 else args.batch_size,
+        shuffle=True
+    )
+    test_dataloader = DataLoader(test_dataset, batch_size=test_size, shuffle=False)
+
+    # Define the model, loss function, and optimizer
+    model = RegressionModel(input_size=input_size, output_size=output_size).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    
+    if args.loss.upper() == "MSE":
         criterion = nn.MSELoss()
-        # criterion = nn.L1Loss()
-    
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=0.0001)
-
-    print("Number of parameters: {}".format(model.count_parameters()))
-    print("Number of training samples: {}".format(len(train_keypoints)))
-    print("Ratio pf training samples to parameters: {:.2f}".format(len(train_keypoints)/model.count_parameters()))
-    print("Number of test samples: {}".format(len(test_keypoints)))
-
-    num_epochs = args.epochs
-    train_loss_log = []
-    test_loss_log = []
-
-    # Move the model and the data to the device
-    model = model.to(device)
-    train_keypoints = train_keypoints.to(device)
-    train_positions = train_positions.to(device)
-    test_keypoints = test_keypoints.to(device)
-    test_positions = test_positions.to(device)
-    # criterion = criterion.to(device)
-    
-    if args.load:
-        model.load_state_dict(torch.load("regression_model.pt"))
+    elif args.loss.upper() == "L1":
+        criterion = nn.L1Loss()
+    elif args.loss.upper() == "SPHERICAL":
+        if not args.spherical_output:
+            criterion = nn.L1Loss()
+            warnings.warn("Spherical loss function used with cartesian output. Regressing to the L1 loss")
+        else:
+            criterion = SphericalDistanceLoss()
     else:
-        # Train the model
-        training_start_time = time.time()
-        for epoch in range(num_epochs):
+        raise ValueError("Unknown loss function: {}".format(args.loss))
+    
+    if not args.distance.upper() in ["EUCLIDEAN", "SPHERICAL"]:
+        raise ValueError("Unknown distance function: {}".format(args.distance))
+    
+    # Print the number of parameters
+    print('Number of parameters: {}'.format(model.count_parameters()))
+
+    # Training loop
+    writer = SummaryWriter(
+        log_dir=os.path.join(args.workdir, "tensorboard_logs"),
+    )
+    start_time = time.time()
+    for epoch in tqdm(range(args.epochs)):
+        for batch_x, batch_y in train_dataloader:
             
             # Forward pass
-            y_pred = model(train_keypoints)
-            loss = criterion(y_pred, train_positions)
+            y_pred = model(batch_x.to(device))
+            loss = criterion(y_pred, batch_y.to(device))
             
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            train_loss_log.append(loss.item())
 
-            # Print progress
-            if (epoch+1) % int(num_epochs/10) == 0 or epoch == 0:
-                elapsed_time = time.time() - training_start_time
-                time_per_epoch = elapsed_time / (epoch+1)
-                remaining_time = time_per_epoch * (num_epochs - epoch - 1)
-                print("+---------------------------+")
-                print("Epoch [{}/{}]".format(epoch+1, num_epochs))
-                print("Elapsed time: {:.2f} s ({:.2f} s per epoch)".format(elapsed_time, time_per_epoch))
-                print("Remaining time: {:.2f} s".format(remaining_time))
-                print("Loss: {:.4f}".format(loss.item()))
+            # Log the loss
+            writer.add_scalar('Loss/train', loss.item(), epoch)
 
-                y_test_pred = model(test_keypoints)
-                test_loss = criterion(y_test_pred, test_positions)
-                print("---")
-                print("Test loss: {:.4f}".format(test_loss.item()))
-                test_loss_log.append(test_loss.item())
-            
-    # Test the model on new data
-    print("=================================")
-    y_test_pred = model(test_keypoints)
-    test_loss = y_test_pred.cpu().detach().numpy() - test_positions.cpu().detach().numpy()
-    test_dist = np.linalg.norm(test_loss, axis=1)
-    print("Test dist:")
-    print("min: {:.4f}".format(np.min(test_dist)))
-    print("max: {:.4f}".format(np.max(test_dist)))
-    print("mean: {:.4f}".format(np.mean(test_dist)))
-    if args.spherical_input:
-        angle_dist = np.linalg.norm(test_loss[:, 1:], axis=1)
-        print("---\nTest dist (last two coordinates):")
-        print("min: {:.4f}".format(np.min(angle_dist)))
-        print("max: {:.4f}".format(np.max(angle_dist)))
-        print("mean: {:.4f}".format(np.mean(angle_dist)))
+        # Test the model
+        if epoch % args.test_interval == 0:
+            test_model(
+                args,
+                model,
+                test_dataloader,
+                device,
+                criterion,
+                epoch,
+                writer,
+            )
+        
+        # Print progress
+        if args.verbose and (epoch+1) % 10 == 0:
+            elapsed_time = time.time() - start_time
+            remaining_time = elapsed_time / (epoch+1) * (args.epochs - epoch - 1)
+            print('Epoch [{:5d}/100]\tLoss: {:7.4f}\tElapsed: {:5.2f} s\tRemaining: {:5.2f} s'.format(epoch+1, loss.item(), elapsed_time, remaining_time))
 
-    sort_idx = np.argsort(test_dist)
-    sorted_test_dist = test_dist[sort_idx]
-    sorted_test_images = test_images[sort_idx]
 
-    # print("---\nBest images:")
-    # for i in range(10):
-    #     print("Image ID: {:d}, dist: {:.4f}".format(sorted_test_images[i], sorted_test_dist[i]))
-    
-    # print("---\nWorst images:")
-    # for i in range(1, 11):
-    #     print("Image ID: {:d}, dist: {:.4f}".format(sorted_test_images[-i], sorted_test_dist[-i]))
-
-    plot_training_data(
-        args.epochs,
-        args.lr,
-        train_loss_log,
-        test_loss_log,
-        test_positions.cpu().detach().numpy(),
-        y_test_pred.cpu().detach().numpy(),
-        args.spherical_input,
+    # Test the model
+    test_model(
+        args,
+        model,
+        test_dataloader,
+        device,
+        criterion,
+        epoch,
+        writer,
     )
+            
 
     # Save the model
-    model_filename = "regression_model.pt"
+    model_filename = os.path.join(args.workdir, "view_regressor.pth")
     torch.save(model.cpu().state_dict(), model_filename)
+    print("Model saved to {}".format(model_filename))
 
-    
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     args = parse_args()
     main(args)

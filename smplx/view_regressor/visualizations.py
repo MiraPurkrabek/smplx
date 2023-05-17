@@ -83,11 +83,11 @@ def plot_heatmap(pts, is_spherical=False, return_img=False):
         plt.tight_layout(pad=0)
 
         fig.canvas.draw()
-        image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-        image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        heatmap_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        heatmap_img = heatmap_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         plt.close(fig)
 
-        return image_from_plot
+        return heatmap_img
 
     else:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
