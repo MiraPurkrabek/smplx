@@ -199,12 +199,7 @@ def main(args):
             
             # Forward pass
             y_pred = model(batch_x.to(device))
-            # print(y_pred[0, :], batch_y[0, :])
-            # if not args.spherical_output:
-            #     y_pred = c2s(y_pred, use_torch=True)
             loss = criterion(y_pred, batch_y.to(device))
-            # print(control_loss(y_pred, batch_y.to(device)))
-            # print(loss.item())
 
             # Backward pass and optimization
             optimizer.zero_grad()
