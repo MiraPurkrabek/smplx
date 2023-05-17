@@ -3,18 +3,27 @@ import numpy as np
 import torch
 
 
-def c2s(pts):
+def c2s(pts, use_torch=False):
     x = pts[:, 0]
     y = pts[:, 1]
     z = pts[:, 2]
-
-    r = np.linalg.norm(pts, axis=1)
-    theta = np.arctan2(
-        np.sqrt(x*x + y*y),
-        z,
-    )
-    phi = np.arctan2(y, x)
-    return np.stack([r, theta, phi], axis=1)
+    if use_torch:
+        r = torch.norm(pts, dim=1)
+        theta = torch.atan2(
+            torch.sqrt(x*x + y*y),
+            z,
+        )
+        phi = torch.atan2(y, x)
+        spherical = torch.stack([r, theta, phi], dim=1)
+    else:
+        r = np.linalg.norm(pts, axis=1)
+        theta = np.arctan2(
+            np.sqrt(x*x + y*y),
+            z,
+        )
+        phi = np.arctan2(y, x)
+        spherical = np.stack([r, theta, phi], axis=1)
+    return spherical
 
 
 def s2c(pts):
@@ -73,36 +82,44 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None):
     return keypoints, bboxes_xywh, image_ids
 
 
-def process_keypoints(keypoints, bboxes):
+def process_keypoints(keypoints, bboxes, add_visibility=False, add_bboxes=True, normalize=True):
     """
     Process the keypoints to minimize the domain gap between synthetic and COCO keypoints.
     1. Normalize the keypoints to be in the range [0, 1] with respect to the bounding box
     2. Remove keypoints with visibility < 2
     """
 
+    num_keypoints = keypoints.shape[0]
     keypoints = np.reshape(keypoints, (-1, 17, 3)).astype(np.float32)
     
     # Normalize the keypoints to be in the range [0, 1] with respect to the bounding box
     bboxes = bboxes[:, None, :]
-    keypoints[:, :, 0] = (keypoints[:, :, 0] - bboxes[:, :, 0]) / bboxes[:, :, 2]
-    keypoints[:, :, 1] = (keypoints[:, :, 1] - bboxes[:, :, 1]) / bboxes[:, :, 3]
+    if normalize:
+        keypoints[:, :, 0] = (keypoints[:, :, 0] - bboxes[:, :, 0]) / bboxes[:, :, 2]
+        keypoints[:, :, 1] = (keypoints[:, :, 1] - bboxes[:, :, 1]) / bboxes[:, :, 3]
 
     # Remove keypoints with visibility < 2
     visibilities = keypoints[:, :, 2].squeeze()
     keypoints[visibilities < 2, :] = 0
 
     # Remove the visibility flag from the keypoints
-    keypoints = keypoints[:, :, :2]
-
-    print("Keypoints shape:", keypoints.shape)
+    if not add_visibility:
+        keypoints = keypoints[:, :, :2]
 
     # Stack bbox width and height to the keypoints
-    keypoints = np.concatenate([keypoints, bboxes[:, :, 2:]], axis=1)
-    print("Keypoints shape:", keypoints.shape)
-
+    if add_bboxes:
+        if add_visibility:
+            keypoints = np.reshape((num_keypoints, -1))
+            keypoints = np.concatenate([keypoints, bboxes[:, :, 2:].squeeze()], axis=1)
+        else:
+            keypoints = np.concatenate([keypoints, bboxes[:, :, 2:]], axis=1)
+    
     # Reshape the keypoints to be a 1D array
-    keypoints = np.reshape(keypoints, (-1, 2*17 + 2))
+    keypoints = np.reshape(keypoints, (num_keypoints, -1))
     print("Keypoints shape:", keypoints.shape)
+    
+    # for coor in range(keypoints.shape[1]):
+    #     print("Coordinate {:d}: min={:.3f}, max={:.3f}".format(coor, np.min(keypoints[:, coor]), np.max(keypoints[:, coor])))
     
     return keypoints
 

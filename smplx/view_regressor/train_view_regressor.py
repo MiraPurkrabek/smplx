@@ -34,6 +34,8 @@ def parse_args():
     parser.add_argument('--weight-decay', type=float, default=0.0,
                         help='Weight decay for the optimizer')
     parser.add_argument('--batch-size', type=int, default=256)
+    parser.add_argument('--net-depth', type=int, default=3)
+    parser.add_argument('--net-width', type=int, default=32)
     parser.add_argument('--test-interval', type=int, default=10)
     parser.add_argument('--train-split', type=float, default=0.8)
     parser.add_argument('--spherical-output', action="store_true", default=False,
@@ -50,6 +52,12 @@ def parse_args():
                         help='Will force CPU computation')
     parser.add_argument('--verbose', action="store_true", default=False,
                         help='Will print loss to the console')
+    parser.add_argument('--normalize-input', action=argparse.BooleanOptionalAction, default=True,
+                        help='Will normalize the input keypoints by the bounding box size')
+    parser.add_argument('--visibility-in-input', action="store_true", default=False,
+                        help='Will add the visibility of the keypoints to the input')
+    parser.add_argument('--bbox-in-input', action=argparse.BooleanOptionalAction, default=True,
+                        help='Will add the bounding box size to the input')
     
     args = parser.parse_args()
 
@@ -111,8 +119,13 @@ def main(args):
     
     # Load the data
     keypoints, bboxes_xywh, image_ids, positions = load_data_from_coco_file(coco_filepath, views_filepath)
-    keypoints = process_keypoints(keypoints, bboxes_xywh)    
-    
+    keypoints = process_keypoints(
+        keypoints,
+        bboxes_xywh,
+        normalize=args.normalize_input,
+        add_visibility=args.visibility_in_input,
+        add_bboxes=args.bbox_in_input,
+    )    
 
     if args.spherical_output:
         positions = c2s(positions)
@@ -151,7 +164,12 @@ def main(args):
     test_dataloader = DataLoader(test_dataset, batch_size=test_size, shuffle=False)
 
     # Define the model, loss function, and optimizer
-    model = RegressionModel(input_size=input_size, output_size=output_size).to(device)
+    model = RegressionModel(
+        input_size=input_size,
+        output_size=output_size,
+        width = args.net_width,
+        depth = args.net_depth,
+    ).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
     if args.loss.upper() == "MSE":
@@ -159,12 +177,7 @@ def main(args):
     elif args.loss.upper() == "L1":
         criterion = nn.L1Loss()
     elif args.loss.upper() == "SPHERICAL":
-        if not args.spherical_output:
-            criterion = nn.L1Loss()
-            warnings.warn("Spherical loss function used with cartesian output. Regressing to the L1 loss")
-        else:
-            criterion = SphericalDistanceLoss()
-            # control_loss = SphericalDistanceLoss(reduction="none")
+        criterion = SphericalDistanceLoss()
     else:
         raise ValueError("Unknown loss function: {}".format(args.loss))
     
@@ -187,6 +200,8 @@ def main(args):
             # Forward pass
             y_pred = model(batch_x.to(device))
             # print(y_pred[0, :], batch_y[0, :])
+            # if not args.spherical_output:
+            #     y_pred = c2s(y_pred, use_torch=True)
             loss = criterion(y_pred, batch_y.to(device))
             # print(control_loss(y_pred, batch_y.to(device)))
             # print(loss.item())
