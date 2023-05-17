@@ -23,8 +23,10 @@ def parse_args():
                         help='Filename of the views file')
     parser.add_argument('--coco-filename', type=str, default="person_keypoints_val2017.json",
                         help='Filename of the coco annotations file')
-    parser.add_argument('--workdir', type=str, default="view_regressor_workdir",
+    parser.add_argument('--workdir', type=str, default="logs",
                         help='Workdir where to save the model and the logs')
+    parser.add_argument('--experiment-name', type=str, default=None,
+                        help='Name of the subfolder where to save the model and the logs')
     parser.add_argument('--epochs', type=int, default=1000,
                         help='Number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001,
@@ -47,7 +49,12 @@ def parse_args():
     parser.add_argument('--verbose', action="store_true", default=False,
                         help='Will print loss to the console')
     
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.experiment_name is None:
+        args.experiment_name = time.strftime("%Y%m%d_%H%M%S")
+
+    return args
 
 
 def test_model(args, model, dataloader, device, criterion, epoch, writer):
@@ -93,6 +100,8 @@ def test_model(args, model, dataloader, device, criterion, epoch, writer):
 
 def main(args):
 
+    # Create the workdir
+    args.workdir = os.path.join(args.workdir, args.experiment_name)
     os.makedirs(args.workdir, exist_ok=True)
 
     views_filepath = os.path.join(args.folder, args.views_filename)
@@ -160,7 +169,8 @@ def main(args):
 
     # Training loop
     writer = SummaryWriter(
-        log_dir=os.path.join(args.workdir, "tensorboard_logs"),
+        log_dir=args.workdir,
+        comment=args.experiment_name,
     )
     start_time = time.time()
     for epoch in tqdm(range(args.epochs), ascii=True):

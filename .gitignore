@@ -120,3 +120,5 @@ images/smplx_original/
 *.pth
 
 *_workdir/
+
+logs/
