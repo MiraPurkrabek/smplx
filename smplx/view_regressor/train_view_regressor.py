@@ -1,6 +1,7 @@
 import os
 import argparse
 import time
+import json
 import numpy as np
 import warnings
 from tqdm import tqdm
@@ -13,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from model import RegressionModel, SphericalDistanceLoss
 from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance
-from visualizations import plot_training_data, plot_heatmap
+from visualizations import plot_heatmap
 
 def parse_args(): 
     parser = argparse.ArgumentParser()
@@ -24,11 +25,11 @@ def parse_args():
                         help='Filename of the coco annotations file')
     parser.add_argument('--workdir', type=str, default="view_regressor_workdir",
                         help='Workdir where to save the model and the logs')
-    parser.add_argument('--epochs', type=int, default=100,
+    parser.add_argument('--epochs', type=int, default=1000,
                         help='Number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate for the optimizer')
-    parser.add_argument('--batch-size', type=int, default=1024)
+    parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--test-interval', type=int, default=10)
     parser.add_argument('--train-split', type=float, default=0.8)
     parser.add_argument('--spherical-output', action="store_true", default=False,
@@ -38,7 +39,7 @@ def parse_args():
     parser.add_argument('--loss', type=str, default="MSE",
                         help='Loss function. Known values: MSE, L1, Spherical')
     parser.add_argument('--distance', type=str, default="Euclidean",
-                        help='Distance function. Known values: Euclidean, Spherical. If Spherical adn 3d output, will ignore the radius.')
+                        help='Distance function. Known values: Euclidean, Spherical. If Spherical and 3d output, will ignore the radius.')
     parser.add_argument('--load', action="store_true", default=False,
                         help='If True, will load the model from the checkpoint file')
     parser.add_argument('--cpu', action="store_true", default=False,
@@ -162,7 +163,7 @@ def main(args):
         log_dir=os.path.join(args.workdir, "tensorboard_logs"),
     )
     start_time = time.time()
-    for epoch in tqdm(range(args.epochs)):
+    for epoch in tqdm(range(args.epochs), ascii=True):
         for batch_x, batch_y in train_dataloader:
             
             # Forward pass
@@ -212,6 +213,11 @@ def main(args):
     model_filename = os.path.join(args.workdir, "view_regressor.pth")
     torch.save(model.cpu().state_dict(), model_filename)
     print("Model saved to {}".format(model_filename))
+
+    # Save the arguments
+    args_filename = os.path.join(args.workdir, "args.json")
+    with open(args_filename, "w") as f:
+        json.dump(vars(args), f, indent=2)
 
 
 if __name__ == '__main__':
