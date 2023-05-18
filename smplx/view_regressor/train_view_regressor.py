@@ -58,6 +58,8 @@ def parse_args():
                         help='Will add the visibility of the keypoints to the input')
     parser.add_argument('--bbox-in-input', action=argparse.BooleanOptionalAction, default=True,
                         help='Will add the bounding box size to the input')
+    parser.add_argument('--test-on-COCO', action="store_true", default=False,
+                        help='Will test the model on the COCO dataset')
     
     args = parser.parse_args()
 
@@ -108,6 +110,34 @@ def test_model(args, model, dataloader, device, criterion, epoch, writer):
             )
 
 
+def infere_model_on_COCO(args, model, dataloader, device, epoch, writer):
+    with torch.no_grad():
+        for batch_x in dataloader:
+
+            batch_x = batch_x[0]
+            y_pred = model(batch_x.to(device))
+
+            # Log the histogram of radius
+            if args.spherical_output:
+                test_radius = y_pred[:, 0].cpu().numpy()
+            else:
+                test_radius = np.linalg.norm(y_pred.cpu().numpy(), axis=1)
+            writer.add_histogram(
+                'COCO radius/test',
+                test_radius,
+                global_step = epoch,
+            )
+
+            # Log the PDF (probability density function)
+            test_pdf = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True)
+            test_pdf = np.array(test_pdf).astype(np.uint8).transpose(2, 0, 1)
+            writer.add_image(
+                "COCO PDF/test",
+                test_pdf,
+                global_step = epoch,
+            )
+
+
 def main(args):
 
     # Create the workdir
@@ -125,7 +155,18 @@ def main(args):
         normalize=args.normalize_input,
         add_visibility=args.visibility_in_input,
         add_bboxes=args.bbox_in_input,
-    )    
+    )
+
+    # Load the COCO dataset if needed
+    if args.test_on_COCO:
+        coco_keypoints, coco_bboxes_xywh, _ = load_data_from_coco_file(coco_filepath)
+        coco_keypoints = process_keypoints(
+            coco_keypoints,
+            coco_bboxes_xywh,
+            normalize=args.normalize_input,
+            add_visibility=args.visibility_in_input,
+            add_bboxes=args.bbox_in_input,
+        )
 
     if args.spherical_output:
         positions = c2s(positions)
@@ -162,6 +203,15 @@ def main(args):
         shuffle=True
     )
     test_dataloader = DataLoader(test_dataset, batch_size=test_size, shuffle=False)
+
+    if args.test_on_COCO:
+        coco_dataloader = DataLoader(
+            TensorDataset(
+                torch.from_numpy(coco_keypoints).float(),
+            ),
+            batch_size=coco_keypoints.shape[0],
+            shuffle=False
+        )
 
     # Define the model, loss function, and optimizer
     model = RegressionModel(
@@ -204,7 +254,7 @@ def main(args):
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.001)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.001)
             optimizer.step()
 
             # Save the loss for later averaging
@@ -224,6 +274,16 @@ def main(args):
                 epoch,
                 writer,
             )
+
+            if args.test_on_COCO:
+                infere_model_on_COCO(
+                    args,
+                    model,
+                    coco_dataloader,
+                    device,
+                    epoch,
+                    writer,
+                )
         
         # Print progress
         if args.verbose and (epoch) % args.test_interval == 0:
