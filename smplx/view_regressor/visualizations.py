@@ -218,7 +218,7 @@ def visualize_pose(keypoints):
     img = np.zeros((int(max_h)+1, int(max_w)+1, 3), dtype=np.uint8)
 
     for kpt in keypoints:
-        if kpt[2] < 2:
+        if kpt[0] == 0 and kpt[1] == 0:
             continue
         
         img = cv2.circle(img, (int(kpt[0]), int(kpt[1])), 3, (0, 0, 255), -1)
@@ -226,7 +226,8 @@ def visualize_pose(keypoints):
     for bone in COCO_SKELETON:
         bone = np.array(bone) - 1
 
-        if keypoints[bone[0], 2] < 2 or keypoints[bone[1], 2] < 2:
+        if ((keypoints[bone[0], 0] == 0 and keypoints[bone[0], 1] == 0) or
+            (keypoints[bone[1], 0] == 0 and keypoints[bone[1], 1] == 0)):
             continue
         
         img = cv2.line(
