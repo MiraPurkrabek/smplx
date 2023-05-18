@@ -12,7 +12,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
 from torch.utils.tensorboard import SummaryWriter
 
-from model import RegressionModel, SphericalDistanceLoss
+from model import RegressionModel, SphericalDistanceLoss, MSELossWithRegularization
 from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance
 from visualizations import plot_heatmap
 
@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument('--flat-output', action="store_true", default=False,
                         help='If True, will train the regressor on spherical coordinates ignoring the radius')
     parser.add_argument('--loss', type=str, default="MSE",
-                        help='Loss function. Known values: MSE, L1, Spherical')
+                        help='Loss function. Known values: MSE, L1, Spherical, MSE+Reg')
     parser.add_argument('--distance', type=str, default="Euclidean",
                         help='Distance function. Known values: Euclidean, Spherical. If Spherical and 3d output, will ignore the radius.')
     parser.add_argument('--load', action="store_true", default=False,
@@ -226,6 +226,11 @@ def main(args):
         criterion = nn.MSELoss()
     elif args.loss.upper() == "L1":
         criterion = nn.L1Loss()
+    elif args.loss.upper() == "MSE+REG":
+        criterion = MSELossWithRegularization(
+            reg_weight=1.0,
+            reg_type="exact" if args.flat_output else "min",
+        )
     elif args.loss.upper() == "SPHERICAL":
         criterion = SphericalDistanceLoss()
     else:
@@ -254,7 +259,6 @@ def main(args):
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.001)
             optimizer.step()
 
             # Save the loss for later averaging
