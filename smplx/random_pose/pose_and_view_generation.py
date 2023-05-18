@@ -155,7 +155,6 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
     
     if distance < 0:
         # distance = rnd(1.5, 5.0)
-        print("Distance must be positive. Using 2.0 instead.")
         distance = rnd(0.3, 15.0)
     
     # Noise is 20°
