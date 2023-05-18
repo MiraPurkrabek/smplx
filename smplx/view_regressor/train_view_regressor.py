@@ -12,9 +12,11 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
 from torch.utils.tensorboard import SummaryWriter
 
-from model import RegressionModel, SphericalDistanceLoss, MSELossWithRegularization
+from model import RegressionModel, SphericalDistanceLoss, MSELossWithRegularization, SphericalDotProductLoss
 from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance
 from visualizations import plot_heatmap
+
+torch.autograd.set_detect_anomaly(True)
 
 def parse_args(): 
     parser = argparse.ArgumentParser()
@@ -232,7 +234,10 @@ def main(args):
             reg_type="exact" if args.flat_output else "min",
         )
     elif args.loss.upper() == "SPHERICAL":
-        criterion = SphericalDistanceLoss()
+        # criterion = SphericalDistanceLoss(
+        #     is_cartesian=not args.spherical_output,
+        # )
+        criterion = SphericalDotProductLoss(is_spherical=args.spherical_output)
     else:
         raise ValueError("Unknown loss function: {}".format(args.loss))
     
@@ -254,12 +259,17 @@ def main(args):
             
             # Forward pass
             y_pred = model(batch_x.to(device))
+            assert not torch.any(torch.isnan(y_pred))
+            # print(c2s(y_pred.cpu().detach().numpy())[0, :])
             loss = criterion(y_pred, batch_y.to(device))
+            # print(loss.item())
 
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            # print(model.get_biggest_parameter())
 
             # Save the loss for later averaging
             losses.append(loss.item())

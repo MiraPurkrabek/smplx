@@ -133,6 +133,7 @@ def angular_distance(pts1, pts2, use_torch=False):
         sin = torch.sin
         cos = torch.cos
         all = torch.all
+        any = torch.any
         abs = torch.abs
         clip = torch.clamp
     else:
@@ -140,15 +141,16 @@ def angular_distance(pts1, pts2, use_torch=False):
         sin = np.sin
         cos = np.cos
         all = np.all
+        any = np.any
         abs = np.abs
         clip = np.clip
 
     if pts1.shape[1] == 3:
-        radius1, theta1, phi1 = pts1[:, 0], pts1[:, 1], pts1[:, 2]
-        radius2, theta2, phi2 = pts2[:, 0], pts2[:, 1], pts2[:, 2]
+        radius1, theta1, phi1 = pts1[:, :1], pts1[:, 1:2], pts1[:, 2:]
+        radius2, theta2, phi2 = pts2[:, :1], pts2[:, 1:2], pts2[:, 2:]
     else:
-        theta1, phi1 = pts1[:, 0], pts1[:, 1]
-        theta2, phi2 = pts2[:, 0], pts2[:, 1]
+        theta1, phi1 = pts1[:, :1], pts1[:, 1:2]
+        theta2, phi2 = pts2[:, :1], pts2[:, 1:2]
 
     # Clip the input - not sure if this helped any
     # theta1 = clip(theta1, 0, np.pi)
@@ -159,13 +161,13 @@ def angular_distance(pts1, pts2, use_torch=False):
     dist = acos(sin(theta1)*sin(theta2) + cos(theta1)*cos(theta2)*cos(phi1 - phi2))
 
     # Add radius difference - not sure if this helped any
-    # if pts1.shape[1] == 3:
-    #     dist += 0.1 * abs(radius1 - radius2)
+    if pts1.shape[1] == 3:
+        dist += 1.0 * abs(radius1 - radius2)
 
-    # if not all(dist >= 0):
-    #     print(pts1)
-    #     print(pts2)
-    #     print(dist)
+    if not all(dist >= 0):
+        print(pts1[:10])
+        print(pts2[:10])
+        print(dist[:10])
 
     assert all(dist >= 0)
     # assert all(dist <= np.pi)
@@ -175,11 +177,29 @@ def angular_distance(pts1, pts2, use_torch=False):
 
 if __name__ == "__main__":
 
-    pts1 = np.array([[0, 0, -1]], dtype=np.float32)
-    pts2 = np.array([[0, 0, 1]], dtype=np.float32)
+    pts1 = np.array([
+        [0, 0, -1],
+        [0, 0, 1],
+        [0, 1, 0],
+        [1, 0, 0],
+        [0, -1, 0],
+        [1, 1, 0],
+        [1, 0, -1],
+    ], dtype=np.float32)
+    pts2 = np.zeros(pts1.shape, dtype=np.float32)
+    pts2[:, -1] = 1
+    d = angular_distance(c2s(pts1), c2s(pts2))
+    d = d * 180 / np.pi
+    
+    print("Distance of selected points on a unit sphere (in degrees):")
+    for i in range(pts1.shape[0]):
+        print("Points {} x {}:\t\t{:.3f}".format(pts1[i, :], pts2[i, :], d[i]))
+    
     pts1 = np.random.normal(size = (100000, 3))
     pts2 = np.random.normal(size = (100000, 3))
     d = angular_distance(c2s(pts1), c2s(pts2))
     d = d * 180 / np.pi
 
-    print(np.min(d), np.mean(d), np.max(d))
+    print()
+    print("Distance of random points on a unit sphere (in degrees):")
+    print("Min: {:.3f}, Mean: {:.3f}, Max: {:.3f}".format(np.min(d), np.mean(d), np.max(d)))

@@ -43,6 +43,9 @@ class RegressionModel(nn.Module):
     
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
+    
+    def get_biggest_parameter(self):
+        return max(p.abs().max() for p in self.parameters() if p.requires_grad)
 
 
 class MSELossWithRegularization(nn.Module):
@@ -101,4 +104,39 @@ class SphericalDistanceLoss(nn.Module):
         else:
             loss = distance
 
+        return loss
+
+
+class SphericalDotProductLoss(nn.Module):
+    def __init__(self, reduction='mean'):
+        super(SphericalDotProductLoss, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, pred, target):
+        
+        # Compute the norm of the predicted and true points
+        pred_norm = torch.norm(pred, dim=1, keepdim=True)
+        target_norm = torch.norm(target, dim=1, keepdim=True)
+
+        # Convert predicted and true points to unit vectors
+        pred = pred / pred_norm
+        target = target / target_norm
+
+        # Compute the dot product between predicted and true unit vectors
+        dot_product = torch.sum(pred * target, dim=1)
+
+        # Compute the angle between predicted and true points using arccosine
+        angle = torch.acos(dot_product)
+
+        # Regularize the angle with norm
+        angle += torch.abs(pred_norm - target_norm).squeeze()
+
+        # Apply reduction
+        if self.reduction == 'mean':
+            loss = angle.mean()
+        elif self.reduction == 'sum':
+            loss = angle.sum()
+        else:
+            loss = angle
+        
         return loss
