@@ -36,7 +36,7 @@ def plot_testing_data(y_test_pred, is_spherical=False):
     plt.show()
 
 
-def plot_heatmap(pts, is_spherical=False, return_img=False):
+def plot_heatmap(pts, is_spherical=False, return_img=False, return_angles=False):
 
     if is_spherical:
         if pts.shape[1] == 2:
@@ -87,7 +87,10 @@ def plot_heatmap(pts, is_spherical=False, return_img=False):
         heatmap_img = heatmap_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         plt.close(fig)
 
-        return heatmap_img
+        if return_angles:
+            return heatmap_img, data_theta, data_phi
+        else:
+            return heatmap_img
 
     else:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
@@ -117,6 +120,9 @@ def plot_heatmap(pts, is_spherical=False, return_img=False):
             "heatmap_distance_{:.1f}.png".format(radius)
         ))
         plt.show()
+
+        if return_angles:
+            return data_theta, data_phi
 
 
 def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions, y_test_pred, spherical=False):

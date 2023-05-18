@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from data_processing import angular_distance, c2s
+from data_processing import angular_distance, c2s, s2c
 
 class RegressionModel(nn.Module):
     def __init__(self, input_size=51, output_size=3, width=32, depth=3):
@@ -108,28 +108,37 @@ class SphericalDistanceLoss(nn.Module):
 
 
 class SphericalDotProductLoss(nn.Module):
-    def __init__(self, reduction='mean'):
+    def __init__(self, reduction='mean', is_spherical=False):
         super(SphericalDotProductLoss, self).__init__()
         self.reduction = reduction
+        self.is_spherical = is_spherical
+        self.eps = 1e-8
 
     def forward(self, pred, target):
         
+        # If the input is spherical, convert it to cartesian
+        if self.is_spherical:
+            pred = s2c(pred, use_torch=True)
+            target = s2c(target, use_torch=True)
+
         # Compute the norm of the predicted and true points
         pred_norm = torch.norm(pred, dim=1, keepdim=True)
         target_norm = torch.norm(target, dim=1, keepdim=True)
 
         # Convert predicted and true points to unit vectors
-        pred = pred / pred_norm
-        target = target / target_norm
+        pred_unit = pred / (pred_norm + self.eps)
+        target_unit = target / (target_norm + self.eps)
 
         # Compute the dot product between predicted and true unit vectors
-        dot_product = torch.sum(pred * target, dim=1)
+        dot_product = torch.sum(pred_unit * target_unit, dim=1)
 
         # Compute the angle between predicted and true points using arccosine
         angle = torch.acos(dot_product)
 
         # Regularize the angle with norm
-        angle += torch.abs(pred_norm - target_norm).squeeze()
+        # angle += torch.abs(
+        #     torch.norm(pred, dim=1) - torch.norm(target, dim=1)
+        # )
 
         # Apply reduction
         if self.reduction == 'mean':

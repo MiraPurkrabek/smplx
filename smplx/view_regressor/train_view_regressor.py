@@ -86,7 +86,7 @@ def test_model(args, model, dataloader, device, criterion, epoch, writer):
             elif args.distance.upper() == "SPHERICAL":
                 test_distance = angular_distance(y_pred.cpu().numpy(), batch_y.cpu().numpy())
             writer.add_histogram(
-                'Test distance/test',
+                '04 Test Distance/test',
                 test_distance,
                 global_step = epoch,
             )
@@ -97,13 +97,13 @@ def test_model(args, model, dataloader, device, criterion, epoch, writer):
             else:
                 test_radius = np.linalg.norm(y_pred.cpu().numpy(), axis=1)
             writer.add_histogram(
-                'Test radius/test',
+                '01 Test Radius/test',
                 test_radius,
                 global_step = epoch,
             )
 
             # Log the PDF (probability density function)
-            test_pdf = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True)
+            test_pdf, test_theta, test_phi = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True, return_angles=True)
             test_pdf = np.array(test_pdf).astype(np.uint8).transpose(2, 0, 1)
             writer.add_image(
                 "Test PDF/test",
@@ -111,8 +111,20 @@ def test_model(args, model, dataloader, device, criterion, epoch, writer):
                 global_step = epoch,
             )
 
+            # Log the histograms of angles
+            writer.add_histogram(
+                '02 Test Theta/test',
+                test_theta,
+                global_step = epoch,
+            )
+            writer.add_histogram(
+                '03 Test Phi/test',
+                test_phi,
+                global_step = epoch,
+            )
 
-def infere_model_on_COCO(args, model, dataloader, device, epoch, writer):
+
+def infere_model_on_COCO(args, model, dataloader, device, epoch, writer, string="COCO"):
     with torch.no_grad():
         for batch_x in dataloader:
 
@@ -125,17 +137,29 @@ def infere_model_on_COCO(args, model, dataloader, device, epoch, writer):
             else:
                 test_radius = np.linalg.norm(y_pred.cpu().numpy(), axis=1)
             writer.add_histogram(
-                'COCO radius/test',
+                '11 {:s} Radius/test'.format(string),
                 test_radius,
                 global_step = epoch,
             )
 
             # Log the PDF (probability density function)
-            test_pdf = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True)
+            test_pdf, test_theta, test_phi = plot_heatmap(y_pred.cpu().numpy(), args.spherical_output, return_img=True, return_angles=True)
             test_pdf = np.array(test_pdf).astype(np.uint8).transpose(2, 0, 1)
             writer.add_image(
-                "COCO PDF/test",
+                "{:s} PDF/test".format(string),
                 test_pdf,
+                global_step = epoch,
+            )
+
+            # Log the histograms of angles
+            writer.add_histogram(
+                '12 {:s} Theta/test'.format(string),
+                test_theta,
+                global_step = epoch,
+            )
+            writer.add_histogram(
+                '13 {:s} Phi/test'.format(string),
+                test_phi,
                 global_step = epoch,
             )
 
@@ -158,17 +182,6 @@ def main(args):
         add_visibility=args.visibility_in_input,
         add_bboxes=args.bbox_in_input,
     )
-
-    # Load the COCO dataset if needed
-    if args.test_on_COCO:
-        coco_keypoints, coco_bboxes_xywh, _ = load_data_from_coco_file(coco_filepath)
-        coco_keypoints = process_keypoints(
-            coco_keypoints,
-            coco_bboxes_xywh,
-            normalize=args.normalize_input,
-            add_visibility=args.visibility_in_input,
-            add_bboxes=args.bbox_in_input,
-        )
 
     if args.spherical_output:
         positions = c2s(positions)
@@ -206,14 +219,30 @@ def main(args):
     )
     test_dataloader = DataLoader(test_dataset, batch_size=test_size, shuffle=False)
 
+    # Load the COCO dataset if needed
     if args.test_on_COCO:
-        coco_dataloader = DataLoader(
-            TensorDataset(
-                torch.from_numpy(coco_keypoints).float(),
-            ),
-            batch_size=coco_keypoints.shape[0],
-            shuffle=False
-        )
+        test_filepaths = {
+            "COCO": "/datagrid/personal/purkrmir/data/COCO/original/annotations/person_keypoints_val2017.json",
+            "FRONT": "/datagrid/personal/purkrmir/data/pose_experiments/FRONT_views_test/annotations/person_keypoints_val2017.json",
+        }
+        test_dataloaders = {}
+        for key, filepath in test_filepaths.items():
+            coco_keypoints, coco_bboxes_xywh, _ = load_data_from_coco_file(filepath)
+            coco_keypoints = process_keypoints(
+                coco_keypoints,
+                coco_bboxes_xywh,
+                normalize=args.normalize_input,
+                add_visibility=args.visibility_in_input,
+                add_bboxes=args.bbox_in_input,
+            )
+            coco_dataloader = DataLoader(
+                TensorDataset(
+                    torch.from_numpy(coco_keypoints).float(),
+                ),
+                batch_size=coco_keypoints.shape[0],
+                shuffle=False
+            )
+            test_dataloaders[key] = coco_dataloader
 
     # Define the model, loss function, and optimizer
     model = RegressionModel(
@@ -255,6 +284,7 @@ def main(args):
     start_time = time.time()
     for epoch in tqdm(range(args.epochs), ascii=True):
         losses = []
+        max_params = []
         for batch_x, batch_y in train_dataloader:
             
             # Forward pass
@@ -269,13 +299,15 @@ def main(args):
             loss.backward()
             optimizer.step()
 
-            # print(model.get_biggest_parameter())
+            max_params.append(model.get_biggest_parameter().item())
 
             # Save the loss for later averaging
             losses.append(loss.item())
 
         # Log the loss
         writer.add_scalar('Loss/train', np.mean(losses), epoch)
+        # Log the max_params
+        writer.add_scalar('Params/train', np.max(max_params), epoch)
         
         # Test the model
         if epoch % args.test_interval == 0:
@@ -290,14 +322,16 @@ def main(args):
             )
 
             if args.test_on_COCO:
-                infere_model_on_COCO(
-                    args,
-                    model,
-                    coco_dataloader,
-                    device,
-                    epoch,
-                    writer,
-                )
+                for key, coco_dataloader in test_dataloaders.items():
+                    infere_model_on_COCO(
+                        args,
+                        model,
+                        coco_dataloader,
+                        device,
+                        epoch,
+                        writer,
+                        string=key,
+                    )
         
         # Print progress
         if args.verbose and (epoch) % args.test_interval == 0:
@@ -316,6 +350,17 @@ def main(args):
         epoch,
         writer,
     )
+
+    for key, coco_dataloader in test_dataloaders.items():
+        infere_model_on_COCO(
+            args,
+            model,
+            coco_dataloader,
+            device,
+            epoch,
+            writer,
+            string=key,
+        )
             
 
     # Save the model

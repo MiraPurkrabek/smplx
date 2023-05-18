@@ -4,9 +4,10 @@ import torch
 
 
 def c2s(pts, use_torch=False):
-    x = pts[:, 0]
-    y = pts[:, 1]
-    z = pts[:, 2]
+    if use_torch:
+        x, y, z = torch.unbind(pts, dim=1)
+    else:
+        x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
     if use_torch:
         r = torch.norm(pts, dim=1)
         theta = torch.atan2(
@@ -26,20 +27,32 @@ def c2s(pts, use_torch=False):
     return spherical
 
 
-def s2c(pts):
-    if pts.shape[1] == 3:
-        r = pts[:, 0]
-        theta = pts[:, 1]
-        phi = pts[:, 2]
+def s2c(pts, use_torch=False):
+    if use_torch:
+        fn = torch
     else:
-        r = np.ones(pts.shape[0]) # If no radius given, use 1
-        theta = pts[:, 0]
-        phi = pts[:, 1]
+        fn = np
 
-    x = r * np.sin(theta) * np.cos(phi)
-    y = r * np.sin(theta) * np.sin(phi)
-    z = r * np.cos(theta)
-    return np.stack([x, y, z], axis=1)
+    if pts.shape[1] == 3:
+        if use_torch:
+            r, theta, phi = torch.unbind(pts, dim=1)
+        else:
+            r = pts[:, 0]
+            theta = pts[:, 1]
+            phi = pts[:, 2]
+    else:
+        if use_torch:
+            theta, phi = torch.unbind(pts, dim=1)
+            r = torch.ones(pts.shape[0]).to(theta.device) # If no radius given, use 1
+        else:
+            r = np.ones(pts.shape[0]) # If no radius given, use 1
+            theta = pts[:, 0]
+            phi = pts[:, 1]
+
+    x = r * fn.sin(theta) * fn.cos(phi)
+    y = r * fn.sin(theta) * fn.sin(phi)
+    z = r * fn.cos(theta)
+    return fn.stack([x, y, z], axis=1)
 
 
 def load_data_from_coco_file(coco_filepath, views_filepath=None):
@@ -164,10 +177,10 @@ def angular_distance(pts1, pts2, use_torch=False):
     if pts1.shape[1] == 3:
         dist += 1.0 * abs(radius1 - radius2)
 
-    if not all(dist >= 0):
-        print(pts1[:10])
-        print(pts2[:10])
-        print(dist[:10])
+    # if not all(dist >= 0):
+    #     print(pts1[:10])
+    #     print(pts2[:10])
+    #     print(dist[:10])
 
     assert all(dist >= 0)
     # assert all(dist <= np.pi)
