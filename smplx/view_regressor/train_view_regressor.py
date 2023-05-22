@@ -35,9 +35,9 @@ def parse_args():
                         help='Learning rate for the optimizer')
     parser.add_argument('--weight-decay', type=float, default=0.0,
                         help='Weight decay for the optimizer')
-    parser.add_argument('--batch-size', type=int, default=256)
+    parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--net-depth', type=int, default=3)
-    parser.add_argument('--net-width', type=int, default=32)
+    parser.add_argument('--net-width', type=int, default=128)
     parser.add_argument('--test-interval', type=int, default=10)
     parser.add_argument('--train-split', type=float, default=0.8)
     parser.add_argument('--spherical-output', action="store_true", default=False,
@@ -224,6 +224,8 @@ def main(args):
         test_filepaths = {
             "COCO": "/datagrid/personal/purkrmir/data/COCO/original/annotations/person_keypoints_val2017.json",
             "FRONT": "/datagrid/personal/purkrmir/data/pose_experiments/FRONT_views_test/annotations/person_keypoints_val2017.json",
+            "TOP": "/datagrid/personal/purkrmir/data/pose_experiments/TOP_views_test/annotations/person_keypoints_val2017.json",
+            "PERIMETER": "/datagrid/personal/purkrmir/data/pose_experiments/PERIMETER_views_test/annotations/person_keypoints_val2017.json",
         }
         test_dataloaders = {}
         for key, filepath in test_filepaths.items():
