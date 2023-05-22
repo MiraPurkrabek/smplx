@@ -62,6 +62,10 @@ def parse_args():
                         help='Will add the bounding box size to the input')
     parser.add_argument('--test-on-COCO', action="store_true", default=False,
                         help='Will test the model on the COCO dataset')
+    parser.add_argument('--num-visible-keypoints', type=int, default=4,
+                        help='Number of visible keypoints to use in the input')
+    parser.add_argument('--remove-limbs', action="store_true", default=False,
+                        help='Will remove the limbs from the input')
     
     args = parser.parse_args()
 
@@ -174,13 +178,19 @@ def main(args):
     coco_filepath = os.path.join(args.folder, args.coco_filename)
     
     # Load the data
-    keypoints, bboxes_xywh, image_ids, positions = load_data_from_coco_file(coco_filepath, views_filepath)
+    keypoints, bboxes_xywh, image_ids, positions = load_data_from_coco_file(
+        coco_filepath,
+        views_filepath,
+        remove_limbs=args.remove_limbs,
+        num_visible_keypoints=args.num_visible_keypoints,
+    )
     keypoints = process_keypoints(
         keypoints,
         bboxes_xywh,
         normalize=args.normalize_input,
         add_visibility=args.visibility_in_input,
         add_bboxes=args.bbox_in_input,
+        remove_limbs=args.remove_limbs,
     )
 
     if args.spherical_output:
@@ -229,13 +239,18 @@ def main(args):
         }
         test_dataloaders = {}
         for key, filepath in test_filepaths.items():
-            coco_keypoints, coco_bboxes_xywh, _ = load_data_from_coco_file(filepath)
+            coco_keypoints, coco_bboxes_xywh, _ = load_data_from_coco_file(
+                filepath,
+                remove_limbs=args.remove_limbs,
+                num_visible_keypoints=args.num_visible_keypoints,
+            )
             coco_keypoints = process_keypoints(
                 coco_keypoints,
                 coco_bboxes_xywh,
                 normalize=args.normalize_input,
                 add_visibility=args.visibility_in_input,
                 add_bboxes=args.bbox_in_input,
+                remove_limbs=args.remove_limbs,
             )
             coco_dataloader = DataLoader(
                 TensorDataset(

@@ -55,7 +55,7 @@ def s2c(pts, use_torch=False):
     return fn.stack([x, y, z], axis=1)
 
 
-def load_data_from_coco_file(coco_filepath, views_filepath=None):
+def load_data_from_coco_file(coco_filepath, views_filepath=None, remove_limbs=False, num_visible_keypoints=4):
     coco_dict = json.load(open(coco_filepath, "r"))
     image_ids = []
     keypoints = []
@@ -72,9 +72,24 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None):
         kpts = np.array(annot["keypoints"])
         bbox = np.array(annot["bbox"])
 
+        # Remove limbs
+        if remove_limbs:
+            kpts = np.reshape(kpts, (-1, 3))
+            kpts = kpts[[
+                0,      # Nose
+                1,      # Left eye
+                2,      # Right eye
+                3,      # Left ear
+                4,      # Right ear
+                5,      # Left shoulder
+                6,      # Right shoulder
+                11,     # Left hip
+                12,     # Right hip
+            ], :].flatten()
+
         # At least 4 keypoints must be visible
         vis_mask = kpts[2::3] > 1
-        if np.sum(vis_mask) < 3:
+        if np.sum(vis_mask) < (num_visible_keypoints-1):
             continue
 
         keypoints.append(kpts)
@@ -95,15 +110,17 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None):
     return keypoints, bboxes_xywh, image_ids
 
 
-def process_keypoints(keypoints, bboxes, add_visibility=False, add_bboxes=True, normalize=True):
+def process_keypoints(keypoints, bboxes, add_visibility=False, add_bboxes=True, normalize=True, remove_limbs=False):
     """
     Process the keypoints to minimize the domain gap between synthetic and COCO keypoints.
     1. Normalize the keypoints to be in the range [0, 1] with respect to the bounding box
     2. Remove keypoints with visibility < 2
     """
 
-    num_keypoints = keypoints.shape[0]
-    keypoints = np.reshape(keypoints, (-1, 17, 3)).astype(np.float32)
+    num_samples = keypoints.shape[0]
+    num_keypoints = 9 if remove_limbs else 17
+
+    keypoints = np.reshape(keypoints, (-1, num_keypoints, 3)).astype(np.float32)
     
     # Normalize the keypoints to be in the range [0, 1] with respect to the bounding box
     bboxes = bboxes[:, None, :]
@@ -122,13 +139,13 @@ def process_keypoints(keypoints, bboxes, add_visibility=False, add_bboxes=True, 
     # Stack bbox width and height to the keypoints
     if add_bboxes:
         if add_visibility:
-            keypoints = np.reshape((num_keypoints, -1))
+            keypoints = np.reshape((num_samples, -1))
             keypoints = np.concatenate([keypoints, bboxes[:, :, 2:].squeeze()], axis=1)
         else:
             keypoints = np.concatenate([keypoints, bboxes[:, :, 2:]], axis=1)
     
     # Reshape the keypoints to be a 1D array
-    keypoints = np.reshape(keypoints, (num_keypoints, -1))
+    keypoints = np.reshape(keypoints, (num_samples, -1))
     print("Keypoints shape:", keypoints.shape)
     
     # for coor in range(keypoints.shape[1]):
