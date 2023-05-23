@@ -207,6 +207,28 @@ COCO_SKELETON = [
         [ 5,  7],
 ]
 
+COCO_SKELETON_COLORS = [
+    [0, 0, 139],        # Left ankle - Left knee
+    [0, 0, 139],        # Left knee - Left hip
+    [2, 108, 69],       # Right ankle - Right knee
+    [2, 108, 69],       # Right knee - Right hip
+    [255, 255, 0],      # Left hip - Right hip
+    [255, 255, 0],      # Left hip - Left shoulder
+    [255, 255, 0],      # Right hip - Right shoulder
+    [255, 255, 0],      # Left shoulder - Right shoulder
+    [0, 0, 237],        # Left shoulder - Left elbow
+    [4, 204, 131],      # Right shoulder - Right elbow
+    [0, 0, 237],        # Left elbow - Left wrist
+    [4, 204, 131],      # Right elbow - Right wrist
+    [255, 255, 0],      # Left eye - Right eye
+    [0, 119, 237],      # Nose - Left eye
+    [0, 237, 118],      # Nose - Right eye
+    [0, 119, 237],      # Left eye - Left ear
+    [0, 237, 118],      # Right eye - Right ear
+    [0, 119, 237],      # Left ear - Left shoulder
+    [0, 237, 118],      # Right ear - Right shoulder
+]
+
 OPENPOSE_SKELETON = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], \
                [10, 11], [2, 12], [12, 13], [13, 14], [2, 1], [1, 15], [15, 17], \
                [1, 16], [16, 18]]#, [3, 17], [6, 18]]

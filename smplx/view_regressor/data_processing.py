@@ -67,7 +67,6 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None, remove_limbs=Fa
 
     for annot in coco_dict["annotations"]:
         image_id = annot["image_id"]
-        image_ids.append(image_id)
         image_name = "{:d}.jpg".format(image_id)
         kpts = np.array(annot["keypoints"])
         bbox = np.array(annot["bbox"])
@@ -92,6 +91,7 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None, remove_limbs=Fa
         if np.sum(vis_mask) < (num_visible_keypoints-1):
             continue
 
+        image_ids.append(image_id)
         keypoints.append(kpts)
         bboxes_xywh.append(bbox)
         if not views_filepath is None:
@@ -101,7 +101,7 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None, remove_limbs=Fa
 
     keypoints = np.array(keypoints)
     bboxes_xywh = np.array(bboxes_xywh)
-    image_ids = np.array(image_ids)
+    image_ids = np.array(image_ids).squeeze()
     
     if not views_filepath is None:
         positions = np.array(positions)
@@ -191,8 +191,8 @@ def angular_distance(pts1, pts2, use_torch=False):
     dist = acos(sin(theta1)*sin(theta2) + cos(theta1)*cos(theta2)*cos(phi1 - phi2))
 
     # Add radius difference - not sure if this helped any
-    if pts1.shape[1] == 3:
-        dist += 1.0 * abs(radius1 - radius2)
+    # if pts1.shape[1] == 3:
+    #     dist += 1.0 * abs(radius1 - radius2)
 
     # if not all(dist >= 0):
     #     print(pts1[:10])

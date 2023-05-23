@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
-from smplx.joint_names import COCO_JOINTS, COCO_SKELETON
+from smplx.joint_names import COCO_JOINTS, COCO_SKELETON, COCO_SKELETON_COLORS
 
 from smplx.view_regressor.data_processing import s2c, c2s
 
@@ -224,9 +224,9 @@ def visualize_pose(keypoints):
         if kpt[0] == 0 and kpt[1] == 0:
             continue
         
-        img = cv2.circle(img, (int(kpt[0]), int(kpt[1])), 3, (0, 0, 255), -1)
+        img = cv2.circle(img, (int(kpt[0]), int(kpt[1])), 4, (255, 0, 0), -1)
         
-    for bone in COCO_SKELETON:
+    for bone, color in zip(COCO_SKELETON, COCO_SKELETON_COLORS):
         bone = np.array(bone) - 1
 
         if ((keypoints[bone[0], 0] == 0 and keypoints[bone[0], 1] == 0) or
@@ -237,7 +237,7 @@ def visualize_pose(keypoints):
             img,
             (int(keypoints[bone[0], 0]), int(keypoints[bone[0], 1])),
             (int(keypoints[bone[1], 0]), int(keypoints[bone[1], 1])),
-            (0, 255, 0),
+            color,
             2
         )
 

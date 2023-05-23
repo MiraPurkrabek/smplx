@@ -5,6 +5,7 @@ import json
 import numpy as np
 import warnings
 from tqdm import tqdm
+import cv2
 
 import torch
 import torch.nn as nn
@@ -14,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from model import RegressionModel, SphericalDistanceLoss, MSELossWithRegularization, SphericalDotProductLoss
 from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance
-from visualizations import plot_heatmap
+from visualizations import plot_heatmap, visualize_pose
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -128,7 +129,7 @@ def test_model(args, model, dataloader, device, criterion, epoch, writer):
             )
 
 
-def infere_model_on_COCO(args, model, dataloader, device, epoch, writer, string="COCO"):
+def infere_model_on_COCO(args, model, dataloader, device, epoch, writer, string="COCO", image_ids=None, image_folder=None):
     with torch.no_grad():
         for batch_x in dataloader:
 
@@ -166,6 +167,48 @@ def infere_model_on_COCO(args, model, dataloader, device, epoch, writer, string=
                 test_phi,
                 global_step = epoch,
             )
+
+            # Select N 'most top' images
+            if image_ids is not None and image_folder is not None:
+                if y_pred.shape[1]  == 2:
+                    tops =  np.stack([
+                            np.ones((len(y_pred), 1)) * np.pi / 2,
+                            np.ones((len(y_pred), 1)) * np.pi / 2,
+                        ], axis=1).squeeze()
+                else:
+                    tops = np.stack([
+                            np.ones((len(y_pred), 1)),
+                            np.ones((len(y_pred), 1)) * np.pi / 2,
+                            np.ones((len(y_pred), 1)) * np.pi / 2,
+                        ], axis=1).squeeze()
+                distance_from_top = angular_distance(
+                    c2s(y_pred.cpu().numpy()),
+                    tops
+                ).squeeze()
+
+                top_indices = np.argsort(distance_from_top)
+                for i, idx in enumerate(top_indices[:5]):
+                    idx = int(idx)
+                    
+                    in_img = cv2.imread(os.path.join(image_folder, "..", "val2017", "{:012d}.jpg".format(int(image_ids[idx])))),
+                    if isinstance(in_img, tuple):
+                        in_img = in_img[0]
+                    in_img = cv2.cvtColor(in_img, cv2.COLOR_BGR2RGB)
+                    in_img = in_img.astype(np.uint8).transpose(2, 0, 1)
+
+                    writer.add_image(
+                        "{:s} Top Images/image {:02d}".format(string, i),
+                        in_img,
+                        global_step = epoch,
+                    )
+
+                    if not args.remove_limbs:
+                        writer.add_image(
+                            "{:s} Top Poses/pose {:02d}".format(string, i),
+                            visualize_pose(batch_x[idx, :].numpy().squeeze()).astype(np.uint8).transpose(2, 0, 1),
+                            global_step = epoch,
+                        )
+
 
 
 def main(args):
@@ -236,14 +279,16 @@ def main(args):
             "FRONT": "/datagrid/personal/purkrmir/data/pose_experiments/FRONT_views_test/annotations/person_keypoints_val2017.json",
             "TOP": "/datagrid/personal/purkrmir/data/pose_experiments/TOP_views_test/annotations/person_keypoints_val2017.json",
             "PERIMETER": "/datagrid/personal/purkrmir/data/pose_experiments/PERIMETER_views_test/annotations/person_keypoints_val2017.json",
+            "TRAIN": "/datagrid/personal/purkrmir/data/SyntheticPose/pose_regressor_50k/annotations/person_keypoints_val2017.json",
         }
         test_dataloaders = {}
         for key, filepath in test_filepaths.items():
-            coco_keypoints, coco_bboxes_xywh, _ = load_data_from_coco_file(
+            coco_keypoints, coco_bboxes_xywh, coco_image_ids = load_data_from_coco_file(
                 filepath,
                 remove_limbs=args.remove_limbs,
                 num_visible_keypoints=args.num_visible_keypoints,
             )
+            print(coco_keypoints.shape, coco_bboxes_xywh.shape, coco_image_ids.shape)
             coco_keypoints = process_keypoints(
                 coco_keypoints,
                 coco_bboxes_xywh,
@@ -255,11 +300,15 @@ def main(args):
             coco_dataloader = DataLoader(
                 TensorDataset(
                     torch.from_numpy(coco_keypoints).float(),
+                    # torch.from_numpy(coco_image_ids).float(),
                 ),
                 batch_size=coco_keypoints.shape[0],
                 shuffle=False
             )
-            test_dataloaders[key] = coco_dataloader
+            test_dataloaders[key] = {}
+            test_dataloaders[key]["dataloader"] = coco_dataloader
+            test_dataloaders[key]["image_ids"] = coco_image_ids
+            test_dataloaders[key]["folder"] = os.path.dirname(filepath)
 
     # Define the model, loss function, and optimizer
     model = RegressionModel(
@@ -339,15 +388,17 @@ def main(args):
             )
 
             if args.test_on_COCO:
-                for key, coco_dataloader in test_dataloaders.items():
+                for key, coco_item in test_dataloaders.items():
                     infere_model_on_COCO(
                         args,
                         model,
-                        coco_dataloader,
+                        coco_item["dataloader"],
                         device,
                         epoch,
                         writer,
                         string=key,
+                        image_ids=coco_item["image_ids"],
+                        image_folder=coco_item["folder"],
                     )
         
         # Print progress
@@ -368,15 +419,17 @@ def main(args):
         writer,
     )
 
-    for key, coco_dataloader in test_dataloaders.items():
+    for key, coco_item in test_dataloaders.items():
         infere_model_on_COCO(
             args,
             model,
-            coco_dataloader,
+            coco_item["dataloader"],
             device,
             epoch,
             writer,
             string=key,
+            image_ids=coco_item["image_ids"],
+            image_folder=coco_item["folder"],
         )
             
 
