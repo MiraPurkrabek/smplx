@@ -7,7 +7,7 @@ import cv2
 
 import torch
 
-from smplx.view_regressor.data_processing import process_keypoints, load_data_from_coco_file
+from smplx.view_regressor.data_processing import process_keypoints, load_data_from_coco_file, occlude_random_keypoints, occlude_keypoints_with_rectangle, randomly_occlude_keypoints
 from visualizations import visualize_pose
 
 def parse_args(): 
@@ -25,7 +25,8 @@ def main(args):
     keypoints = process_keypoints(keypoints, bboxes_xywh)
 
     idx = 0
-    cv2.imshow("Pose {:d}".format(idx), visualize_pose(keypoints[idx, :]))
+    pose = visualize_pose(keypoints[idx, :], has_bbox=True)
+    cv2.imshow("Pose {:d}".format(idx), pose[:, :, ::-1])
     while True:
         if idx >= keypoints.shape[0]:
             idx = keypoints.shape[0] - 1
@@ -39,11 +40,25 @@ def main(args):
         if k == ord('m') or k == 83:                       # toggle current image
             idx += 1
             cv2.destroyAllWindows()
-            cv2.imshow("Pose {:d}".format(idx), visualize_pose(keypoints[idx, :]))
+            pose = visualize_pose(keypoints[idx, :], has_bbox=True)
+            cv2.imshow("Pose {:d}".format(idx), pose[:, :, ::-1])
         elif k == ord('n') or k == 81:
             idx -= 1
             cv2.destroyAllWindows()
-            cv2.imshow("Pose {:d}".format(idx), visualize_pose(keypoints[idx, :]))
+            pose = visualize_pose(keypoints[idx, :], has_bbox=True)
+            cv2.imshow("Pose {:d}".format(idx), pose[:, :, ::-1])
+        elif k == ord('o'):
+            cv2.destroyAllWindows()
+            pose = visualize_pose(occlude_random_keypoints(keypoints[idx, :].squeeze()), has_bbox=True)
+            cv2.imshow("Pose {:d}".format(idx), pose[:, :, ::-1])
+        elif k == ord('p'):
+            cv2.destroyAllWindows()
+            pose = visualize_pose(occlude_keypoints_with_rectangle(keypoints[idx, :].squeeze()), has_bbox=True)
+            cv2.imshow("Pose {:d}".format(idx), pose[:, :, ::-1])
+        elif k == ord('r'):
+            cv2.destroyAllWindows()
+            pose = visualize_pose(randomly_occlude_keypoints(keypoints[idx, :].squeeze()), has_bbox=True)
+            cv2.imshow("Pose {:d}".format(idx), pose[:, :, ::-1])
         elif k == ord('e') or k == ord('q'):  #escape key 
             break
 

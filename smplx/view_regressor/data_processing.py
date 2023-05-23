@@ -156,32 +156,91 @@ def process_keypoints(keypoints, bboxes, add_visibility=False, add_bboxes=True, 
 
 def occlude_random_keypoints(
         keypoints,
-        min_num_keypoints=4,
+        min_num_keypoints=8,
         has_bbox=True,
-        occlusion_prob=0.1,
     ):
     """
     Occlude a random subset of keypoints.
     """
-    keypoints = np.reshape(keypoints, (-1, 2))
+    keypoints = np.reshape(keypoints.copy(), (-1, 2))
     if has_bbox:
         bbox = keypoints[-1, :]
         keypoints = keypoints[:-1, :]
 
-    num_keypoints = keypoints.shape[0]
-    num_keypoints_to_occlude = np.random.randint(min_num_keypoints, num_keypoints+1)
+    valid_keypoints = keypoints[keypoints[:, 0] > 0, :]
+
+    num_keypoints = valid_keypoints.shape[0]
+    num_keypoints_to_keep = np.random.randint(min_num_keypoints, num_keypoints+1)
 
     # Randomly select keypoints to occlude
-    occlude_mask = np.ones(num_keypoints, dtype=np.bool)
-    occlude_mask[:num_keypoints_to_occlude] = False
+    occlude_mask = np.ones(num_keypoints, dtype=bool)
+    occlude_mask[:num_keypoints_to_keep] = False
     np.random.shuffle(occlude_mask)
     
-    keypoints[occlude_mask, :] = 0
+    valid_keypoints[occlude_mask, :] = 0
+    keypoints[keypoints[:, 0] > 0, :] = valid_keypoints
 
     if has_bbox:
         keypoints = np.concatenate([keypoints, bbox[None, :]], axis=0)
     
     keypoints = keypoints.flatten()
+    return keypoints
+
+
+def occlude_keypoints_with_rectangle(
+        keypoints,
+        min_num_keypoints=8,
+        has_bbox=True,
+    ):
+    """
+    Occlude a random subset of keypoints with a rectangle.
+    """
+    keypoints = np.reshape(keypoints.copy(), (-1, 2))
+    if has_bbox:
+        bbox = keypoints[-1, :]
+        keypoints = keypoints[:-1, :]
+
+    num_keypoints = np.sum(keypoints[:, 0] > 0)
+    num_keypoints_to_keep = np.random.randint(min_num_keypoints, num_keypoints+1)
+    
+    # Select a random point and occlude X nearest keypoints
+    random_pt = np.random.rand(2)
+    dists = np.linalg.norm(keypoints - random_pt, axis=1)
+    dists[keypoints[:, 0] <= 0] = np.inf
+    nearest_keypoints = np.argsort(dists)[num_keypoints_to_keep:]
+    keypoints[nearest_keypoints, :] = 0
+
+    if has_bbox:
+        keypoints = np.concatenate([keypoints, bbox[None, :]], axis=0)
+    
+    keypoints = keypoints.flatten()
+    return keypoints
+
+
+def randomly_occlude_keypoints(keypoints, has_bbox=True, min_num_keypoints=6, rectangle_pst=0.3, occlusion_pst=0.1):
+    """
+    Randomly occlude keypoints with either a rectangle or random points.
+    """
+    keypoints = keypoints.copy()
+    keypoints = np.reshape(keypoints, (-1, 2))
+
+    if has_bbox:
+        num_valid_keypoints = np.sum(keypoints[:-1, 0] > 0)
+    else:
+        num_valid_keypoints = np.sum(keypoints[:, 0] > 0)
+    if num_valid_keypoints <= min_num_keypoints:
+        return keypoints
+
+    random_action = np.random.choice(
+        ["rectangle", "occlusion", None],
+        p=[rectangle_pst, occlusion_pst, 1-(rectangle_pst+occlusion_pst)],
+    )
+
+    if random_action == "rectangle":
+        keypoints = occlude_keypoints_with_rectangle(keypoints, min_num_keypoints=min_num_keypoints, has_bbox=has_bbox)
+    elif random_action == "occlusion":
+        keypoints = occlude_random_keypoints(keypoints, min_num_keypoints=min_num_keypoints, has_bbox=has_bbox)
+
     return keypoints
 
 

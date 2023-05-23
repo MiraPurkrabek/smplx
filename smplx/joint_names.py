@@ -207,26 +207,36 @@ COCO_SKELETON = [
         [ 5,  7],
 ]
 
+LEFT_LEG_COLOR = [0, 255, 0]
+LEFT_ARM_COLOR = [150, 255, 0]
+LEFT_FACE_COLOR = [223, 255, 0]
+
+RIGHT_LEG_COLOR = [0, 0, 255]
+RIGHT_ARM_COLOR = [0, 150, 255]
+RIGHT_FACE_COLOR = [0, 255, 255]
+
+TORSO_COLOR = [255, 150, 0]
+
 COCO_SKELETON_COLORS = [
-    [0, 0, 139],        # Left ankle - Left knee
-    [0, 0, 139],        # Left knee - Left hip
-    [2, 108, 69],       # Right ankle - Right knee
-    [2, 108, 69],       # Right knee - Right hip
-    [255, 255, 0],      # Left hip - Right hip
-    [255, 255, 0],      # Left hip - Left shoulder
-    [255, 255, 0],      # Right hip - Right shoulder
-    [255, 255, 0],      # Left shoulder - Right shoulder
-    [0, 0, 237],        # Left shoulder - Left elbow
-    [4, 204, 131],      # Right shoulder - Right elbow
-    [0, 0, 237],        # Left elbow - Left wrist
-    [4, 204, 131],      # Right elbow - Right wrist
-    [255, 255, 0],      # Left eye - Right eye
-    [0, 119, 237],      # Nose - Left eye
-    [0, 237, 118],      # Nose - Right eye
-    [0, 119, 237],      # Left eye - Left ear
-    [0, 237, 118],      # Right eye - Right ear
-    [0, 119, 237],      # Left ear - Left shoulder
-    [0, 237, 118],      # Right ear - Right shoulder
+    LEFT_LEG_COLOR,        # Left ankle - Left knee
+    LEFT_LEG_COLOR,        # Left knee - Left hip
+    RIGHT_LEG_COLOR,       # Right ankle - Right knee
+    RIGHT_LEG_COLOR,       # Right knee - Right hip
+    TORSO_COLOR,      # Left hip - Right hip
+    TORSO_COLOR,      # Left hip - Left shoulder
+    TORSO_COLOR,      # Right hip - Right shoulder
+    TORSO_COLOR,      # Left shoulder - Right shoulder
+    LEFT_ARM_COLOR,        # Left shoulder - Left elbow
+    RIGHT_ARM_COLOR,      # Right shoulder - Right elbow
+    LEFT_ARM_COLOR,        # Left elbow - Left wrist
+    RIGHT_ARM_COLOR,      # Right elbow - Right wrist
+    TORSO_COLOR,      # Left eye - Right eye
+    LEFT_FACE_COLOR,      # Nose - Left eye
+    RIGHT_FACE_COLOR,      # Nose - Right eye
+    LEFT_FACE_COLOR,      # Left eye - Left ear
+    RIGHT_FACE_COLOR,      # Right eye - Right ear
+    LEFT_FACE_COLOR,      # Left ear - Left shoulder
+    RIGHT_FACE_COLOR,      # Right ear - Right shoulder
 ]
 
 OPENPOSE_SKELETON = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], \

@@ -197,9 +197,14 @@ def plot_training_data(epochs, lr, train_loss_log, test_loss_log, test_positions
         plt.show()
 
 
-def visualize_pose(keypoints):
+def visualize_pose(keypoints, has_bbox=False):
+    keypoints = keypoints.copy()
+    
     if keypoints.ndim < 2:
         keypoints = keypoints.reshape(-1, 2)
+
+    if has_bbox:
+        keypoints = keypoints[:-1, :]
 
     if keypoints.shape[0] > 17:
         keypoints = keypoints[:17, :]
