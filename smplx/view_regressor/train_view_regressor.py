@@ -205,12 +205,11 @@ def infere_model_on_COCO(args, model, dataloader, device, epoch, writer, string=
                         global_step = epoch,
                     )
 
-                    if not args.remove_limbs:
-                        writer.add_image(
-                            "{:s} Top Poses/pose {:02d}".format(string, i),
-                            visualize_pose(batch_x[idx, :].numpy().squeeze()).astype(np.uint8).transpose(2, 0, 1),
-                            global_step = epoch,
-                        )
+                    writer.add_image(
+                        "{:s} Top Poses/pose {:02d}".format(string, i),
+                        visualize_pose(batch_x[idx, :].numpy().squeeze()).astype(np.uint8).transpose(2, 0, 1),
+                        global_step = epoch,
+                    )
 
 
 def main(args):

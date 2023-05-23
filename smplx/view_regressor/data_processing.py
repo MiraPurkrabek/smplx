@@ -74,17 +74,19 @@ def load_data_from_coco_file(coco_filepath, views_filepath=None, remove_limbs=Fa
         # Remove limbs
         if remove_limbs:
             kpts = np.reshape(kpts, (-1, 3))
-            kpts = kpts[[
-                0,      # Nose
-                1,      # Left eye
-                2,      # Right eye
-                3,      # Left ear
-                4,      # Right ear
-                5,      # Left shoulder
-                6,      # Right shoulder
-                11,     # Left hip
-                12,     # Right hip
-            ], :].flatten()
+            kpts[[7, 8, 9, 10, 13, 14, 15, 16], :] = 0
+            # kpts = kpts[[
+            #     0,      # Nose
+            #     1,      # Left eye
+            #     2,      # Right eye
+            #     3,      # Left ear
+            #     4,      # Right ear
+            #     5,      # Left shoulder
+            #     6,      # Right shoulder
+            #     11,     # Left hip
+            #     12,     # Right hip
+            # ], :].flatten()
+            kpts = kpts.flatten()
 
         # At least 4 keypoints must be visible
         vis_mask = kpts[2::3] > 1
@@ -118,7 +120,7 @@ def process_keypoints(keypoints, bboxes, add_visibility=False, add_bboxes=True, 
     """
 
     num_samples = keypoints.shape[0]
-    num_keypoints = 9 if remove_limbs else 17
+    num_keypoints = 17
 
     keypoints = np.reshape(keypoints, (-1, num_keypoints, 3)).astype(np.float32)
     
