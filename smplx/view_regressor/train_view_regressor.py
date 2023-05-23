@@ -210,7 +210,6 @@ def infere_model_on_COCO(args, model, dataloader, device, epoch, writer, string=
                         )
 
 
-
 def main(args):
 
     # Create the workdir

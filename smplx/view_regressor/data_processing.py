@@ -154,6 +154,37 @@ def process_keypoints(keypoints, bboxes, add_visibility=False, add_bboxes=True, 
     return keypoints
 
 
+def occlude_random_keypoints(
+        keypoints,
+        min_num_keypoints=4,
+        has_bbox=True,
+        occlusion_prob=0.1,
+    ):
+    """
+    Occlude a random subset of keypoints.
+    """
+    keypoints = np.reshape(keypoints, (-1, 2))
+    if has_bbox:
+        bbox = keypoints[-1, :]
+        keypoints = keypoints[:-1, :]
+
+    num_keypoints = keypoints.shape[0]
+    num_keypoints_to_occlude = np.random.randint(min_num_keypoints, num_keypoints+1)
+
+    # Randomly select keypoints to occlude
+    occlude_mask = np.ones(num_keypoints, dtype=np.bool)
+    occlude_mask[:num_keypoints_to_occlude] = False
+    np.random.shuffle(occlude_mask)
+    
+    keypoints[occlude_mask, :] = 0
+
+    if has_bbox:
+        keypoints = np.concatenate([keypoints, bbox[None, :]], axis=0)
+    
+    keypoints = keypoints.flatten()
+    return keypoints
+
+
 def angular_distance(pts1, pts2, use_torch=False):
     """
     Compute the angular distance between two points on a unit sphere.
