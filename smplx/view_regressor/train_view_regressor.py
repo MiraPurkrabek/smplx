@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from torch.utils.tensorboard import SummaryWriter
 
 from model import RegressionModel, SphericalDistanceLoss, MSELossWithRegularization, SphericalDotProductLoss
-from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance
+from smplx.view_regressor.data_processing import load_data_from_coco_file, process_keypoints, c2s, s2c, angular_distance, randomly_occlude_keypoints
 from visualizations import plot_heatmap, visualize_pose
 
 torch.autograd.set_detect_anomaly(True)
@@ -67,6 +67,9 @@ def parse_args():
                         help='Number of visible keypoints to use in the input')
     parser.add_argument('--remove-limbs', action="store_true", default=False,
                         help='Will remove the limbs from the input')
+    parser.add_argument('--occlude-data', action="store_true", default=False,
+                        help='Will randomly occlude data as augmentation')
+
     
     args = parser.parse_args()
 
@@ -267,7 +270,7 @@ def main(args):
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=train_size if args.batch_size <= 0 else args.batch_size,
-        shuffle=True
+        shuffle=True,
     )
     test_dataloader = DataLoader(test_dataset, batch_size=test_size, shuffle=False)
 
@@ -351,6 +354,15 @@ def main(args):
         losses = []
         max_params = []
         for batch_x, batch_y in train_dataloader:
+
+            if args.occlude_data:
+                batch_x = randomly_occlude_keypoints(
+                    batch_x,
+                    has_bbox=args.bbox_in_input,
+                    min_num_keypoints=6,
+                    rectangle_pst=0.3,
+                    occlusion_pst=0.1,
+                )
             
             # Forward pass
             y_pred = model(batch_x.to(device))

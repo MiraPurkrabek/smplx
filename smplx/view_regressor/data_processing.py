@@ -162,6 +162,8 @@ def occlude_random_keypoints(
     """
     Occlude a random subset of keypoints.
     """
+
+
     keypoints = np.reshape(keypoints.copy(), (-1, 2))
     if has_bbox:
         bbox = keypoints[-1, :]
@@ -221,26 +223,47 @@ def randomly_occlude_keypoints(keypoints, has_bbox=True, min_num_keypoints=6, re
     """
     Randomly occlude keypoints with either a rectangle or random points.
     """
+    is_pytorch = isinstance(keypoints, torch.Tensor)
+    if is_pytorch:
+        keypoints = keypoints.cpu().numpy()
+
     keypoints = keypoints.copy()
-    keypoints = np.reshape(keypoints, (-1, 2))
+    has_batches = len(keypoints.shape) == 2
 
-    if has_bbox:
-        num_valid_keypoints = np.sum(keypoints[:-1, 0] > 0)
+    if has_batches:
+        num_samples = keypoints.shape[0]
+        for i in range(num_samples):
+            keypoints[i, :] = randomly_occlude_keypoints(
+                keypoints[i, :].squeeze(),
+                has_bbox=has_bbox,
+                min_num_keypoints=min_num_keypoints,
+                rectangle_pst=rectangle_pst,
+                occlusion_pst=occlusion_pst,
+            )
     else:
-        num_valid_keypoints = np.sum(keypoints[:, 0] > 0)
-    if num_valid_keypoints <= min_num_keypoints:
-        return keypoints
+        keypoints = np.reshape(keypoints, (-1, 2))
 
-    random_action = np.random.choice(
-        ["rectangle", "occlusion", None],
-        p=[rectangle_pst, occlusion_pst, 1-(rectangle_pst+occlusion_pst)],
-    )
+        if has_bbox:
+            num_valid_keypoints = np.sum(keypoints[:-1, 0] > 0)
+        else:
+            num_valid_keypoints = np.sum(keypoints[:, 0] > 0)
+        
+        if num_valid_keypoints > min_num_keypoints:
+            random_action = np.random.choice(
+                ["rectangle", "occlusion", None],
+                p=[rectangle_pst, occlusion_pst, 1-(rectangle_pst+occlusion_pst)],
+            )
 
-    if random_action == "rectangle":
-        keypoints = occlude_keypoints_with_rectangle(keypoints, min_num_keypoints=min_num_keypoints, has_bbox=has_bbox)
-    elif random_action == "occlusion":
-        keypoints = occlude_random_keypoints(keypoints, min_num_keypoints=min_num_keypoints, has_bbox=has_bbox)
+            if random_action == "rectangle":
+                keypoints = occlude_keypoints_with_rectangle(keypoints, min_num_keypoints=min_num_keypoints, has_bbox=has_bbox)
+            elif random_action == "occlusion":
+                keypoints = occlude_random_keypoints(keypoints, min_num_keypoints=min_num_keypoints, has_bbox=has_bbox)
 
+        keypoints = keypoints.flatten()
+
+    if is_pytorch:
+        keypoints = torch.from_numpy(keypoints)
+    
     return keypoints
 
 
