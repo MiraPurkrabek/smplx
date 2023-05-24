@@ -43,9 +43,9 @@ def parse_args():
     parser.add_argument('--train-split', type=float, default=0.8)
     parser.add_argument('--spherical-output', action="store_true", default=False,
                         help='If True, will train the regressor on spherical coordinates with the radius')
-    parser.add_argument('--flat-output', action="store_true", default=False,
+    parser.add_argument('--flat-output', action=argparse.BooleanOptionalAction, default=True,
                         help='If True, will train the regressor on spherical coordinates ignoring the radius')
-    parser.add_argument('--loss', type=str, default="MSE",
+    parser.add_argument('--loss', type=str, default="MSE+REG",
                         help='Loss function. Known values: MSE, L1, Spherical, MSE+Reg')
     parser.add_argument('--distance', type=str, default="Euclidean",
                         help='Distance function. Known values: Euclidean, Spherical. If Spherical and 3d output, will ignore the radius.')
@@ -61,13 +61,13 @@ def parse_args():
                         help='Will add the visibility of the keypoints to the input')
     parser.add_argument('--bbox-in-input', action=argparse.BooleanOptionalAction, default=True,
                         help='Will add the bounding box size to the input')
-    parser.add_argument('--test-on-COCO', action="store_true", default=False,
+    parser.add_argument('--test-on-COCO', action=argparse.BooleanOptionalAction, default=True,
                         help='Will test the model on the COCO dataset')
-    parser.add_argument('--num-visible-keypoints', type=int, default=4,
+    parser.add_argument('--num-visible-keypoints', type=int, default=6,
                         help='Number of visible keypoints to use in the input')
     parser.add_argument('--remove-limbs', action="store_true", default=False,
                         help='Will remove the limbs from the input')
-    parser.add_argument('--occlude-data', action="store_true", default=False,
+    parser.add_argument('--occlude-data', action=argparse.BooleanOptionalAction, default=True,
                         help='Will randomly occlude data as augmentation')
 
     
