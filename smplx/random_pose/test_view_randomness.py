@@ -26,66 +26,28 @@ def parse_args():
 
 def interpolate_sphere(pts, score):
 
-    radius = np.mean(np.linalg.norm(pts, axis=1))
+    pts_sph = c2s(pts)
+    radiuses = pts_sph[:, 0]
+    radius = np.mean(radiuses)
+    data_theta = pts_sph[:, 1]
+    data_phi = pts_sph[:, 2]
 
-    # data_phi = np.arccos(pts[:, 1] / radius)
-    # data_theta = np.arctan2(pts[:, 2], pts[:, 0])
-    # xy = pts[:, 0]**2 + pts[:, 1]**2
-    # data_phi = np.arctan2(pts[:, 1], pts[:, 0])
-    # data_theta = np.arctan2(pts[:, 2], np.sqrt(xy)) # for elevation angle defined from XY-plane up]    
-
-    x = pts[:, 0]
-    y = pts[:, 1]
-    z = pts[:, 2]
-
-    data_theta = np.arctan2(y, x)
-    data_phi = np.arctan2(np.sqrt(x * x + y * y), z)
-    
-    # print("Data theta:", np.min(data_theta), np.max(data_theta))
-    # print("Data phi:", np.min(data_phi), np.max(data_phi))
-    # print("Score:", np.min(score), np.max(score))
-    # print("=====================================")
-
-    theta = np.linspace(-np.pi, np.pi, 500)
-    phi = np.linspace(0, np.pi, 250)
+    theta = np.linspace(0, np.pi, 250)
+    phi = np.linspace(-np.pi, np.pi, 500)
     PHI, THETA = np.meshgrid(phi, theta)  # 2D grid for interpolation
     interp = LinearNDInterpolator(list(zip(data_phi, data_theta)), score)
-    SCORE = interp(PHI, THETA)
-
-    # print("Theta:", np.min(theta), np.max(theta))
-    # print("Phi:", np.min(phi), np.max(phi))
-    # print("Score:", np.min(SCORE), np.max(SCORE))
-
-    # y = radius * np.sin(beta)
-    # a = radius * np.cos(beta)
-    # x = a * np.sin(alpha)
-    # z = a * np.cos(alpha)
-    xx = radius * np.cos(THETA) * np.sin(PHI)
-    yy = radius * np.sin(THETA) * np.sin(PHI)
-    zz = radius * np.cos(PHI)
-
-    # print(x.shape, y.shape, z.shape, SCORE.shape)
-
-    # fig = plt.figure()
-    # ax = fig.add_subplot(projection='3d')
-    # ax.plot_surface(xx, yy, zz, facecolors=plt.cm.jet(SCORE))
-    # plt.show()
-    
+    SCORE = interp(PHI, THETA)    
 
     significant_points = {
         "TOP": (np.pi/2, np.pi/2, "ro"),
         "BOTTOM": (np.pi/2, -np.pi/2, "rx"),
         "FRONT": (0, 0, "bo"),
-        # "FRONT": (0, np.pi/2),
-        # "FRONT": (0, np.pi),
-        # "FRONT": (0, -np.pi/2),
         "BACK": (np.pi, 0, "bx"),
         "LEFT": (np.pi/2, 0, "co"),
         "RIGHT": (np.pi/2, np.pi, "cx"),
     }
 
-    plt.pcolormesh(PHI, THETA, SCORE, shading='auto')
-    # plt.plot(data_phi, data_theta, "ok", label="input point")
+    plt.pcolormesh(THETA, PHI, SCORE, shading='auto')
     for key, sp in significant_points.items():
         mkr = sp[2]
         plt.plot(sp[0], sp[1], mkr, label=key)
