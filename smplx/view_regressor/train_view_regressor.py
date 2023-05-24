@@ -207,7 +207,7 @@ def infere_model_on_COCO(args, model, dataloader, device, epoch, writer, string=
 
                     writer.add_image(
                         "{:s} Top Poses/pose {:02d}".format(string, i),
-                        visualize_pose(batch_x[idx, :].numpy().squeeze()).astype(np.uint8).transpose(2, 0, 1),
+                        visualize_pose(batch_x[idx, :].numpy().squeeze(), has_bbox=args.bbox_in_input).astype(np.uint8).transpose(2, 0, 1),
                         global_step = epoch,
                     )
 
@@ -342,6 +342,11 @@ def main(args):
     
     # Print the number of parameters
     print('Number of parameters: {}'.format(model.count_parameters()))
+
+    # Load the model if needed
+    if args.load:
+        model.load_state_dict(torch.load(args.load))
+        print("Loaded model from {}".format(args.load))
 
     # Training loop
     writer = SummaryWriter(
