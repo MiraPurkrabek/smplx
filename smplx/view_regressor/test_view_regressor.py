@@ -17,19 +17,45 @@ def parse_args():
                         help='Filename of the coco annotations file')
     parser.add_argument('--load-from', type=str, default="regression_model.pt",
                         help='Path to the model to load')
+    parser.add_argument('--args', type=str, default=None,
+                        help='Path to the args.json file storing model configuration')
     parser.add_argument('--num-images', type=int, default=-1,
                         help='Number of images to evaluate. Default is all images')
     parser.add_argument('--plot-3d', action='store_true', default=False,
                         help='Whether to plot 3D coordinates')
     
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.args is None:
+        args.args = os.path.join(
+            os.path.dirname(args.load_from),
+            'args.json'
+        )
+
+    return args
 
 
 def main(args):
 
+    # Load the model configuration
+    with open(args.args, 'r') as f:
+        model_args = json.load(f)
+        model_args = argparse.Namespace(**model_args)
+
     # Load the data
-    keypoints, bboxes_xywh, image_ids = load_data_from_coco_file(args.coco_filepath)
-    keypoints = process_keypoints(keypoints, bboxes_xywh)
+    keypoints, bboxes_xywh, image_ids = load_data_from_coco_file(
+        args.coco_filepath,
+        remove_limbs=model_args.remove_limbs,
+        num_visible_keypoints=model_args.num_visible_keypoints,
+    )
+    keypoints = process_keypoints(
+        keypoints,
+        bboxes_xywh,
+        add_visibility=model_args.visibility_in_input,
+        add_bboxes=model_args.bbox_in_input,
+        normalize=model_args.normalize_input,
+        remove_limbs=model_args.remove_limbs,
+    )
 
     input_size = keypoints.shape[1]
 
@@ -41,15 +67,21 @@ def main(args):
         keypoints = keypoints[select_idx, :]
         image_ids = image_ids[select_idx]
 
+    output_size = 3
+    if model_args.spherical_output and model_args.flat_output:
+        output_size = 2
+
     # Define the model, loss function, and optimizer
-    try:
-        model = RegressionModel(input_size=input_size, output_size = 3)
-        model.load_state_dict(torch.load(args.load_from))
-        is_spherical = True
-    except RuntimeError:
-        model = RegressionModel(input_size=input_size, output_size = 2)
-        model.load_state_dict(torch.load(args.load_from))
-        is_spherical = True
+    model = RegressionModel(
+        input_size=input_size,
+        output_size=output_size,
+        width=model_args.net_width,
+        depth=model_args.net_depth,
+    )
+
+    # Load the model
+    model.load_state_dict(torch.load(args.load_from))
+    model.eval()
 
     # Test the model on new data
     print("=================================")
@@ -68,9 +100,10 @@ def main(args):
     #     print("mean: {}".format(np.mean(test_radius)))
 
     if args.plot_3d:
-        plot_testing_data(y_test_pred, is_spherical)
+        raise NotImplementedError("3D plotting not implemented yet")
+        # plot_testing_data(y_test_pred, model_args.spherical_output)
     else:
-        plot_heatmap(y_test_pred, is_spherical)
+        plot_heatmap(y_test_pred, model_args.spherical_output)
     
 if __name__ == "__main__":
     args = parse_args()
