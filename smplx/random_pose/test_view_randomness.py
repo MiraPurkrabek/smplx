@@ -28,6 +28,13 @@ def interpolate_sphere(pts, score):
 
     pts_sph = c2s(pts)
     radiuses = pts_sph[:, 0]
+
+    # Used for filtering by the radius
+    # mask = (np.abs(radiuses - 12.0) < 1.0).astype(bool)
+    # pts_sph = pts_sph[mask, :]
+    # score = score[mask]
+    # radiuses = pts_sph[:, 0]
+
     radius = np.mean(radiuses)
     data_theta = pts_sph[:, 1]
     data_phi = pts_sph[:, 2]
@@ -70,7 +77,11 @@ def main(args):
 
     pts = []
     score = []
+    areas = []
+    vis_kpts = []
+    bbox_sizes = []
     have_score = True
+    is_rich = True
     if args.filepath is None:
         have_score = False
         for _ in range(50000):
@@ -78,28 +89,55 @@ def main(args):
             pts.append(pt)
     else:
         input_dict = json.load(open(args.filepath, "r"))
+
         for img_name in input_dict.keys():
             pts.append(input_dict[img_name]["camera_position"])
+           
             if "oks_score" in input_dict[img_name].keys():
                 score.append(input_dict[img_name]["oks_score"])
             else:
                 have_score = False
+            
+            if "area" in input_dict[img_name].keys():
+                areas.append(input_dict[img_name]["area"])
+                vis_kpts.append(input_dict[img_name]["visible_keypoints"])
+                bbox = np.array(input_dict[img_name]["bbox"])
+                bbox_sizes.append(bbox[2]*bbox[3])
+            else:
+                is_rich = False
 
     pts = np.array(pts)
     score = np.array(score).squeeze()
     score = np.clip(score, 0, 1)
+
+    areas = np.array(areas)
+    vis_kpts = np.array(vis_kpts).squeeze().astype(int)
+    bbox_sizes = np.array(bbox_sizes)
     
     if have_score:
         if args.distance:
-            dist = np.linalg.norm(pts, axis=1)
+            if is_rich:
+                dist = areas
+                xlabel = "Area of the segmentaion mask"
+                
+                # dist = vis_kpts[:, 2].flatten()
+                # xlabel = "Number of visible keypoints"
+
+                dist = bbox_sizes.flatten()
+                xlabel = "Size of the bounding box"
+                
+                plt.xlim([1.05*np.max(dist), -0.05*np.max(dist)])
+            else:
+                dist = np.linalg.norm(pts, axis=1)
+                xlabel = "Distance from origin"
+                
             sort_idx = np.argsort(dist)
-            sorted_dist = dist[sort_idx]
             sorted_score = score[sort_idx]
-            window_size = 50
+            window_size = len(score) // 100
             tmp = np.convolve(sorted_score, np.ones(window_size)/window_size, mode='valid')
-            tmp_x = np.linspace(np.min(sorted_dist), np.max(sorted_dist), len(tmp))
+            tmp_x = np.linspace(np.min(dist), np.max(dist), len(tmp))
             plt.scatter(dist, score)
-            plt.xlabel("Distance from origin")
+            plt.xlabel(xlabel)
             plt.ylabel("OKS score")
             plt.plot(tmp_x, tmp, "r-")
             plt.legend(["OKS score", "Moving average"])
