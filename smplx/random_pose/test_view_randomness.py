@@ -110,6 +110,8 @@ def main(args):
     score = np.array(score).squeeze()
     score = np.clip(score, 0, 1)
 
+    score[np.isnan(score)] = 0
+
     areas = np.array(areas)
     vis_kpts = np.array(vis_kpts).squeeze().astype(int)
     bbox_sizes = np.array(bbox_sizes)
@@ -118,13 +120,13 @@ def main(args):
         if args.distance:
             if is_rich:
                 dist = areas
-                xlabel = "Area of the segmentaion mask"
+                xlabel = "Area of the segmentaion mask [{:d}, {:d}]".format(int(np.max(dist)), int(np.min(dist)))
                 
                 # dist = vis_kpts[:, 2].flatten()
                 # xlabel = "Number of visible keypoints"
 
                 dist = bbox_sizes.flatten()
-                xlabel = "Size of the bounding box"
+                xlabel = "Size of the bounding box [{:d}, {:d}]".format(int(np.max(dist)), int(np.min(dist)))
                 
                 plt.xlim([1.05*np.max(dist), -0.05*np.max(dist)])
             else:
@@ -135,7 +137,7 @@ def main(args):
             sorted_score = score[sort_idx]
             window_size = len(score) // 100
             tmp = np.convolve(sorted_score, np.ones(window_size)/window_size, mode='valid')
-            tmp_x = np.linspace(np.min(dist), np.max(dist), len(tmp))
+            tmp_x = np.linspace(np.min(dist), np.max(dist), len(tmp), endpoint=True)
             plt.scatter(dist, score)
             plt.xlabel(xlabel)
             plt.ylabel("OKS score")
