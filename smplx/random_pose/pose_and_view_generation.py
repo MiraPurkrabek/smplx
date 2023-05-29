@@ -176,7 +176,7 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
     
     if distance < 0:
         # distance = rnd(1.5, 5.0)
-        distance = rnd(0.3, 15.0)
+        distance = rnd(1.5, 8.0)
     
     # Noise is 20°
     noise_size = 20 / 180 * np.pi
