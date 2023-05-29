@@ -81,10 +81,12 @@ def generate_pose(typical_pose=None, simplicity=5):
             (-20, 20), (-30, 30), (-10, 10)
         ],
         "Left shoulder": [
-            (-30, 30), (-90, 20), (-60, 90)
+            # Changed to move 0 along the body
+            (-30, 30), (-90, 20), (-10, 140)
         ],
         "Right shoulder": [
-            (-30, 30), (-20, 90), (-90, 60)
+            # Changed to move 0 along the body
+            (-30, 30), (-20, 90), (-140, 10)
         ],
         "Left elbow": [
             (0, 0), (-120, 0), (0, 0)
@@ -116,10 +118,25 @@ def generate_pose(typical_pose=None, simplicity=5):
 
         min_limits = torch.Tensor(min_limits) / simplicity
         max_limits = torch.Tensor(max_limits) / simplicity
-        joints_rng = max_limits - min_limits
 
-        random_angles = torch.rand((len(joints)*3)) * joints_rng + min_limits
+        extreme_poses = False
+        if extreme_poses:
+            # Sample poses uniformly from the limits - much more extreme poses
+            joints_rng = max_limits - min_limits
+            random_angles = torch.rand((len(joints)*3)) * joints_rng + min_limits
+        else:        
+            # Generate random angles
+            random_angles = torch.normal(
+                mean = torch.zeros((len(joints)*3)),
+                std = 0.5,     # Experimentaly some angles are slightly above 1.0 which is OK
+            )
+            random_angles[random_angles >= 0] *= max_limits[random_angles >= 0]
+            random_angles[random_angles < 0] *= -min_limits[random_angles < 0]
 
+        # Arms in the standart position are too far from the body
+        random_angles[joints["Left shoulder"]*3+2]  -= 70
+        random_angles[joints["Right shoulder"]*3+2] += 70
+        
         # Transfer to radians
         random_angles = random_angles / 180 * np.pi
 
@@ -147,7 +164,11 @@ def generate_pose(typical_pose=None, simplicity=5):
         body_pose[0, joints["Torso"]*3+0] = np.pi / 2
         body_pose[0, joints["Left shoulder"]*3+1] = - np.pi / 2 * 4/5
         body_pose[0, joints["Right shoulder"]*3+1] = np.pi / 2 * 4/5
-
+    
+    elif typical_pose.lower() == "stand":
+        body_pose[0, joints["Left shoulder"]*3+2] = - np.pi / 2 * 4/5
+        body_pose[0, joints["Right shoulder"]*3+2] = np.pi / 2 * 4/5
+        
     return body_pose
 
 

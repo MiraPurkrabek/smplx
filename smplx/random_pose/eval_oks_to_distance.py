@@ -74,7 +74,7 @@ def main(args):
     image_ids = image_ids[~nan_idx]
 
     argsorted_bbox_sizes = np.argsort(bbox_sizes)
-    for idx in argsorted_bbox_sizes[:5]:
+    for idx in argsorted_bbox_sizes[:50]:
         print("bbox size: {:.2f},\tbbox: {},\timage id: {},\toks: {:.4f}".format(
             bbox_sizes[idx],
             bboxes[idx, :],

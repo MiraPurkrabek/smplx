@@ -115,7 +115,17 @@ def main(args):
     areas = np.array(areas)
     vis_kpts = np.array(vis_kpts).squeeze().astype(int)
     bbox_sizes = np.array(bbox_sizes)
-    
+
+    # # Take into account only points with distance == X
+    # dist = np.linalg.norm(pts, axis=1)
+    # mask = (np.abs(dist - 5.0) < 1.0).astype(bool)
+    # pts = pts[mask, :]
+    # score = score[mask]
+    # if is_rich:
+    #     areas = areas[mask]
+    #     vis_kpts = vis_kpts[mask, :]
+    #     bbox_sizes = bbox_sizes[mask]
+
     if have_score:
         if args.distance:
             if is_rich:
