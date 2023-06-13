@@ -84,8 +84,8 @@ def main(args):
     is_rich = True
     if args.filepath is None:
         have_score = False
-        for _ in range(50000):
-            _, pt, _ = random_camera_pose(distance=-1, view_preference=None, return_vectors=True)
+        for _ in range(5000):
+            _, pt, _ = random_camera_pose(distance=-1, view_preference="TOP", return_vectors=True)
             pts.append(pt)
     else:
         input_dict = json.load(open(args.filepath, "r"))
@@ -162,7 +162,7 @@ def main(args):
     else:
         if args.histogram:
             dist = np.linalg.norm(pts, axis=1)
-            spherical = cartesian_to_spherical(pts)
+            spherical = c2s(pts)
             theta = spherical[:, 1]
             phi = spherical[:, 2]
             
