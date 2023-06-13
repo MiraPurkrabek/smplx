@@ -35,6 +35,35 @@ def parse_args():
     return args
 
 
+def save_views(y_test_pred, image_ids, is_spherical, coco_filepath):
+    """Save the predicted views to a file
+
+    Args:
+        y_test_pred (np.ndarray): Predicted views
+        image_ids (np.ndarray): Image IDs
+        is_spherical (bool): Whether the views are spherical coordinates
+    """
+    # Load the coco file
+    with open(coco_filepath, 'r') as f: 
+        coco_data = json.load(f)
+
+    # Get the image_name to image_id dictionary
+    id2name = {}
+    for image in coco_data['images']:
+        id2name[image['id']] = image['file_name']
+
+    if is_spherical:
+        y_test_pred = s2c(y_test_pred)
+
+    views_dict = {}
+    for image_id, view in zip(image_ids, y_test_pred):    
+        views_dict[id2name[image_id]] = {"camera_position": view.tolist()}
+
+    # Save the views to a file
+    with open(os.path.join(os.path.dirname(coco_filepath), 'predicted_views.json'), 'w') as f:
+        json.dump(views_dict, f, indent=2)
+
+
 def main(args):
 
     # Load the model configuration
@@ -104,6 +133,8 @@ def main(args):
         # plot_testing_data(y_test_pred, model_args.spherical_output)
     else:
         plot_heatmap(y_test_pred, model_args.spherical_output)
+
+    save_views(y_test_pred, image_ids, model_args.spherical_output, args.coco_filepath)
     
 if __name__ == "__main__":
     args = parse_args()
