@@ -168,6 +168,9 @@ def main(args):
     
     shutil.rmtree(args.out_folder, ignore_errors=True)
     os.makedirs(args.out_folder, exist_ok=True)
+    if args.coco_format:
+        os.makedirs(os.path.join(args.out_folder, "train2017"), exist_ok=True)
+        os.makedirs(os.path.join(args.out_folder, "annotations"), exist_ok=True)
 
     gt_coco_dict = {
         "images": [],
@@ -427,7 +430,10 @@ def main(args):
                         if "DEPTH" in args.gt_type:
                             rendered_img = draw_depth(rendered_img, depthmap)
                 
-                    save_path = osp.join(args.out_folder, img_name)
+                    if args.coco_format:
+                        save_path = osp.join(args.out_folder, "train2017", img_name)
+                    else:
+                        save_path = osp.join(args.out_folder, img_name)
                     cv2.imwrite(save_path, rendered_img)
 
                     gt_coco_dict["images"].append({
@@ -451,15 +457,19 @@ def main(args):
 
                     progress_bar.update()
         
-        gt_filename = os.path.join(args.out_folder, "coco_annotations.json")
+        if args.coco_format:
+            gt_filename = os.path.join(args.out_folder, "annotations", "person_keypoints_train2017.json")
+            metadata_filename = os.path.join(args.out_folder, "annotations", "metadata")
+            views_filename = os.path.join(args.out_folder, "annotations", "views.json")
+        else:
+            metadata_filename = os.path.join(args.out_folder, "metadata")
+            views_filename = os.path.join(args.out_folder, "views.json")
+            gt_filename = os.path.join(args.out_folder, "coco_annotations.json")
+        
         with open(gt_filename, "w") as fp:
             json.dump(gt_coco_dict, fp, indent=2)
-        
-        metadata_filename = os.path.join(args.out_folder, "metadata")
         with open(metadata_filename, "w") as fp:
             json.dump(vars(args), fp, indent=2)
-
-        views_filename = os.path.join(args.out_folder, "views.json")
         with open(views_filename, "w") as fp:
             json.dump(views_dict, fp, indent=2)
 
@@ -535,6 +545,9 @@ if __name__ == '__main__':
     parser.add_argument('--uniform-background',
                         action="store_true", default=False,
                         help='If True, will draw background with uniform color')
+    parser.add_argument('--coco-format',
+                        action="store_true", default=False,
+                        help='If True, will save annotations in COCO format')
     # parser.add_argument('--gt-type', default='NONE', type=str,
     #                     choices=['NONE', 'depth', 'openpose', 'cocopose'],
     #                     help='The type of model to load')

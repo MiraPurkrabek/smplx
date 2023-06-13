@@ -238,7 +238,7 @@ def random_point_on_sphere(distance=2.0):
     """The projection to the sphere method"""
     
     if distance < 0:
-        distance = rnd(0.3, 15.0)
+        distance = rnd(1.5, 8.0)
     
     # Generate vector big enough to avoid precision error
     pt = np.random.normal(size=3)
