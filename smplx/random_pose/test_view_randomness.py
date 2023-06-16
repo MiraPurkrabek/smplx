@@ -85,7 +85,7 @@ def main(args):
     if args.filepath is None:
         have_score = False
         for _ in range(5000):
-            _, pt, _ = random_camera_pose(distance=-1, view_preference="TOP", return_vectors=True)
+            _, pt, _ = random_camera_pose(distance=-1, view_preference="TOP&BOTTOM", return_vectors=True)
             pts.append(pt)
     else:
         input_dict = json.load(open(args.filepath, "r"))

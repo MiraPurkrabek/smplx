@@ -219,6 +219,14 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
         alpha_range = noise_size
         beta_mean = - np.pi/2
         beta_range = noise_size
+    elif view_preference.upper() == "TOP&BOTTOM":
+        alpha_mean = 0
+        alpha_range = 0             # Because of the hotfix in random_camera_pose
+        beta_range = 0              # Because of the hotfix in random_camera_pose
+        if np.random.rand() < 0.5:
+            beta_mean = np.pi/2
+        else:
+            beta_mean = - np.pi/2
     else:
         raise ValueError("Unknown view preference")
     
@@ -267,7 +275,7 @@ def polar_to_cartesian(alpha, beta, distance):
     return np.array([x, y, z])
     
 
-def add_noise_to_pose(pose, noise_size=40/180*np.pi):
+def add_noise_to_pose(pose, noise_size=60/180*np.pi):
     current_distance = np.linalg.norm(pose)
     # pose += np.random.uniform(low=-1, high=1.0, size=3) * noise_size
     pose += np.random.normal(size=3) * noise_size
@@ -293,7 +301,7 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
         camera_pos = polar_to_cartesian(alpha, beta, distance)
         
         # Quick fix for the noise in TOP view
-        if view_preference.upper() == "TOP":
+        if view_preference.upper() in ["TOP", "TOP&BOTTOM"]:
             camera_pos = add_noise_to_pose(camera_pos)
 
     # Default camera_up is head up
