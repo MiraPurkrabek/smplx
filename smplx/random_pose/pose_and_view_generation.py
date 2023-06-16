@@ -219,7 +219,7 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
         alpha_range = noise_size
         beta_mean = - np.pi/2
         beta_range = noise_size
-    elif view_preference.upper() == "TOP&BOTTOM":
+    elif view_preference.upper() == "TOPBOTTOM":
         alpha_mean = 0
         alpha_range = 0             # Because of the hotfix in random_camera_pose
         beta_range = 0              # Because of the hotfix in random_camera_pose
@@ -301,7 +301,7 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
         camera_pos = polar_to_cartesian(alpha, beta, distance)
         
         # Quick fix for the noise in TOP view
-        if view_preference.upper() in ["TOP", "TOP&BOTTOM"]:
+        if view_preference.upper() in ["TOP", "TOPBOTTOM"]:
             camera_pos = add_noise_to_pose(camera_pos)
 
     # Default camera_up is head up
