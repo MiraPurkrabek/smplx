@@ -15,6 +15,7 @@ from smplx.view_regressor.visualizations import plot_heatmap
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filepath", type=str, default=None)
+    parser.add_argument("--view-preference", type=str, default=None)
     parser.add_argument('--distance', action="store_true", default=False,
                         help='If True, will plot distance from origin instead of position on sphere')
     parser.add_argument('--histogram', action="store_true", default=False,
@@ -85,7 +86,7 @@ def main(args):
     if args.filepath is None:
         have_score = False
         for _ in range(5000):
-            _, pt, _ = random_camera_pose(distance=-1, view_preference="TOPBOTTOM", return_vectors=True)
+            _, pt, _ = random_camera_pose(distance=-1, view_preference=args.view_preference, return_vectors=True)
             pts.append(pt)
     else:
         input_dict = json.load(open(args.filepath, "r"))
