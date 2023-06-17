@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-def generate_pose(typical_pose=None, simplicity=5):
+def generate_pose(typical_pose=None, simplicity=5, extreme_poses=False):
     # Front rotation
     # Counter-clockwise rotation
     # Side bend
@@ -119,7 +119,6 @@ def generate_pose(typical_pose=None, simplicity=5):
         min_limits = torch.Tensor(min_limits) / simplicity
         max_limits = torch.Tensor(max_limits) / simplicity
 
-        extreme_poses = False
         if extreme_poses:
             # Sample poses uniformly from the limits - much more extreme poses
             joints_rng = max_limits - min_limits
@@ -128,7 +127,7 @@ def generate_pose(typical_pose=None, simplicity=5):
             # Generate random angles
             random_angles = torch.normal(
                 mean = torch.zeros((len(joints)*3)),
-                std = 0.5,     # Experimentaly some angles are slightly above 1.0 which is OK
+                std = 0.5,     # Experimentaly; some angles are slightly above 1.0 which is OK
             )
             random_angles[random_angles >= 0] *= max_limits[random_angles >= 0]
             random_angles[random_angles < 0] *= -min_limits[random_angles < 0]
@@ -175,8 +174,8 @@ def generate_pose(typical_pose=None, simplicity=5):
 def random_3d_position_polar(distance=2.0, view_preference=None):
     
     if distance < 0:
-        # distance = rnd(1.5, 5.0)
-        distance = rnd(1.5, 8.0)
+        distance = rnd(1.5, 5.0)
+        # distance = rnd(1.5, 8.0)
     
     # Noise is 20°
     noise_size = 20 / 180 * np.pi
@@ -216,9 +215,9 @@ def random_3d_position_polar(distance=2.0, view_preference=None):
         beta_range = 0              # Because of the hotfix in random_camera_pose
     elif view_preference.upper() == "BOTTOM":
         alpha_mean = 0
-        alpha_range = noise_size
+        alpha_range = 0             # Because of the hotfix in random_camera_pose
         beta_mean = - np.pi/2
-        beta_range = noise_size
+        beta_range = 0              # Because of the hotfix in random_camera_pose
     elif view_preference.upper() == "TOPBOTTOM":
         alpha_mean = 0
         alpha_range = 0             # Because of the hotfix in random_camera_pose
@@ -246,7 +245,8 @@ def random_point_on_sphere(distance=2.0):
     """The projection to the sphere method"""
     
     if distance < 0:
-        distance = rnd(1.5, 8.0)
+        distance = rnd(1.5, 5.0)
+        # distance = rnd(1.5, 8.0)
     
     # Generate vector big enough to avoid precision error
     pt = np.random.normal(size=3)
@@ -301,7 +301,7 @@ def random_camera_pose(distance=3, view_preference=None, rotation=0, return_vect
         camera_pos = polar_to_cartesian(alpha, beta, distance)
         
         # Quick fix for the noise in TOP view
-        if view_preference.upper() in ["TOP", "TOPBOTTOM"]:
+        if view_preference.upper() in ["TOP", "TOPBOTTOM", "BOTTOM"]:
             camera_pos = add_noise_to_pose(camera_pos)
 
     # Default camera_up is head up

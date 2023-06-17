@@ -229,7 +229,7 @@ def main(args):
                 left_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
                 right_hand_pose = torch.zeros(hand_pose.shape, dtype=torch.float32)
             else:
-                body_pose = generate_pose(simplicity=args.pose_simplicity, typical_pose=None)
+                body_pose = generate_pose(simplicity=args.pose_simplicity, typical_pose=None, extreme_poses=args.extreme_poses)
                 left_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
                 right_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
 
@@ -546,6 +546,9 @@ if __name__ == '__main__':
                         action="store_true", default=False,
                         help='If True, will draw background with uniform color')
     parser.add_argument('--coco-format',
+                        action="store_true", default=False,
+                        help='If True, will save annotations in COCO format')
+    parser.add_argument('--extreme-poses',
                         action="store_true", default=False,
                         help='If True, will save annotations in COCO format')
     # parser.add_argument('--gt-type', default='NONE', type=str,
