@@ -4,6 +4,8 @@ import json
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, interp1d
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from matplotlib import rc
 
 from smplx.random_pose.pose_and_view_generation import random_camera_pose
 from smplx.random_pose.visualizations import draw_points_on_sphere
@@ -40,8 +42,8 @@ def interpolate_sphere(pts, score):
     data_theta = pts_sph[:, 1]
     data_phi = pts_sph[:, 2]
 
-    theta = np.linspace(0, np.pi, 250)
-    phi = np.linspace(-np.pi, np.pi, 500)
+    theta = np.linspace(0, np.pi, 500)
+    phi = np.linspace(-np.pi, np.pi, 1000)
     PHI, THETA = np.meshgrid(phi, theta)  # 2D grid for interpolation
     interp = LinearNDInterpolator(list(zip(data_phi, data_theta)), score)
     SCORE = interp(PHI, THETA)    
@@ -55,17 +57,20 @@ def interpolate_sphere(pts, score):
         "RIGHT": (np.pi/2, np.pi, "cx"),
     }
 
-    plt.pcolormesh(THETA, PHI, SCORE, shading='auto')
+    plt.pcolormesh(THETA, PHI, -SCORE, shading='auto')#, cmap="jet")
     for key, sp in significant_points.items():
         mkr = sp[2]
-        plt.plot(sp[0], sp[1], mkr, label=key)
+        plt.plot(sp[0], sp[1], mkr, label=key, markersize=7, markeredgewidth=4)
     plt.plot()
     plt.legend()
-    plt.colorbar()
-    plt.axis("equal")
-    plt.xlabel("phi")
-    plt.ylabel("theta")
-    plt.title("Interpolated heatmap, average distance = {}".format(radius))
+    # plt.colorbar()
+    # plt.axis("equal")
+    plt.xlabel("Latitude", fontsize=14, fontweight='bold')
+    plt.ylabel("Longitude", fontsize=14, fontweight='bold')
+    plt.xlim([0, np.pi])
+    plt.ylim([-np.pi, np.pi])
+    # plt.grid(True)
+    # plt.title("Interpolated heatmap, average distance = {}".format(radius))
     plt.savefig(os.path.join(
         "images",
         "heatmaps",
@@ -81,11 +86,12 @@ def main(args):
     areas = []
     vis_kpts = []
     bbox_sizes = []
+    bbox_ratios = []
     have_score = True
     is_rich = True
     if args.filepath is None:
         have_score = False
-        for _ in range(5000):
+        for _ in range(3000):
             _, pt, _ = random_camera_pose(distance=-1, view_preference=args.view_preference, return_vectors=True)
             pts.append(pt)
     else:
@@ -103,7 +109,9 @@ def main(args):
                 areas.append(input_dict[img_name]["area"])
                 vis_kpts.append(input_dict[img_name]["visible_keypoints"])
                 bbox = np.array(input_dict[img_name]["bbox"])
-                bbox_sizes.append(bbox[2]*bbox[3])
+                bbox_sizes.append(bbox[2] * bbox[3])
+                # bbox_sizes.append(min(bbox[2],bbox[3]))
+                bbox_ratios.append(bbox[2]/bbox[3])
             else:
                 is_rich = False
 
@@ -116,6 +124,7 @@ def main(args):
     areas = np.array(areas)
     vis_kpts = np.array(vis_kpts).squeeze().astype(int)
     bbox_sizes = np.array(bbox_sizes)
+    bbox_ratios = np.array(bbox_ratios)
 
     # # Take into account only points with distance == X
     # dist = np.linalg.norm(pts, axis=1)
@@ -127,6 +136,11 @@ def main(args):
     #     vis_kpts = vis_kpts[mask, :]
     #     bbox_sizes = bbox_sizes[mask]
 
+    # rc('text', usetex=True)
+    rc('axes', linewidth=2)
+    rc('grid', linewidth=2)
+    rc('font', weight='bold', size=10)
+
     if have_score:
         if args.distance:
             if is_rich:
@@ -137,9 +151,15 @@ def main(args):
                 # xlabel = "Number of visible keypoints"
 
                 dist = bbox_sizes.flatten()
-                xlabel = "Size of the bounding box [{:d}, {:d}]".format(int(np.max(dist)), int(np.min(dist)))
-                
-                plt.xlim([1.05*np.max(dist), -0.05*np.max(dist)])
+                dist = np.sqrt(dist)
+                # dist = bbox_ratios.flatten()
+                # xlabel = "Size of the bounding box [{:d}, {:d}]".format(int(np.max(dist)), int(np.min(dist)))
+                xlabel = "Size of the square bounding box side (reversed axis)"
+
+                # plt.xlim([1.05*np.max(dist), -0.05*np.max(dist)])
+                plt.xlim([1.02*np.max(dist), 0])
+
+                plt.plot([222, 222], [0, 1], "b--")
             else:
                 dist = np.linalg.norm(pts, axis=1)
                 xlabel = "Distance from origin"
@@ -149,11 +169,21 @@ def main(args):
             window_size = len(score) // 100
             tmp = np.convolve(sorted_score, np.ones(window_size)/window_size, mode='valid')
             tmp_x = np.linspace(np.min(dist), np.max(dist), len(tmp), endpoint=True)
-            plt.scatter(dist, score)
-            plt.xlabel(xlabel)
-            plt.ylabel("OKS score")
+            # plt.scatter(dist, score)
+
+            currentAxis = plt.gca()
+            currentAxis.add_patch(Rectangle((980, 0), 500, 1,
+                                alpha=0.8, facecolor='lightsteelblue'))
+            # plt.xlim([-0.2, 16])
+            plt.ylim([0, 1])
+            
+            # plt.xlabel(xlabel)
+            # plt.ylabel("OKS score")
+            plt.xlabel(xlabel, fontsize=14, fontweight='bold')
+            plt.ylabel("OKS score", fontsize=14, fontweight='bold')
             plt.plot(tmp_x, tmp, "r-")
-            plt.legend(["OKS score", "Moving average"])
+            # plt.legend(["OKS score", "Moving average"])
+            plt.legend(["Input resolution", "Synthetic data limit", "Moving average"])
             plt.grid()
             plt.show()
         elif args.heatmap:

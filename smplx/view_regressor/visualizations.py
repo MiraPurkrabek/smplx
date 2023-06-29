@@ -93,7 +93,7 @@ def plot_heatmap(pts, is_spherical=False, return_img=False, return_angles=False)
             return heatmap_img
 
     else:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.4*2, 4.8*2))
+        fig, (ax1) = plt.subplots(1, 1, figsize=(6.4*2, 4.8*2))
 
         # ax1.hexbin(data_theta, data_phi, gridsize=100)
         ax1.hist2d(data_theta, data_phi, bins=100)
@@ -104,15 +104,15 @@ def plot_heatmap(pts, is_spherical=False, return_img=False, return_angles=False)
         # plt.colorbar()
         
         ax1.legend()
-        ax1.axis("equal")
-        ax1.set_xlabel("theta")
-        ax1.set_ylabel("phi")
+        # ax1.axis("equal")
+        ax1.set_xlabel("latitude", fontsize=14, fontweight='bold')
+        ax1.set_ylabel("longitude", fontsize=14, fontweight='bold')
         plt.suptitle("Distribution of samples, average distance = {:.2f}".format(radius))
         
-        ax2.hist(radiuses, bins=100)
-        ax2.grid()
-        ax2.set_xlabel("radius")
-        ax2.set_ylabel("count")
+        # ax2.hist(radiuses, bins=100)
+        # ax2.grid()
+        # ax2.set_xlabel("radius")
+        # ax2.set_ylabel("count")
         
         plt.savefig(os.path.join(
             "images",

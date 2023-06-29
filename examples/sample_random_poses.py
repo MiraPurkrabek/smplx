@@ -98,6 +98,9 @@ def get_textured_mesh(vertices, texture_path=None, args=None):
     else:
         texture_folder = os.path.dirname(os.path.dirname(texture_path))
 
+    texture_path = "textures/surreal/images/nongrey_female_0325.jpg"
+    # print(texture_path)
+
     indices_path = os.path.join(
         "textures",
         texture_folder,
@@ -209,6 +212,8 @@ def main(args):
             else:
                 gndr = args.gender
 
+            gndr = "female"
+
             model = smplx.create(args.model_folder, model_type=args.model_type,
                                 gender=gndr, use_face_contour=args.use_face_contour,
                                 num_betas=args.num_betas,
@@ -232,6 +237,23 @@ def main(args):
                 body_pose = generate_pose(simplicity=args.pose_simplicity, typical_pose=None, extreme_poses=args.extreme_poses)
                 left_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
                 right_hand_pose = (torch.rand(hand_pose.shape)-0.5) * 3
+            
+            # body_pose = torch.tensor([[
+            #     0.1654, -0.5727,  0.8830,  0.7824,  0.7062,  0.4708,  0.0000, -0.5215,
+            #     0.1672,  1.3027,  0.0000,  0.0000,  2.6179,  0.0000,  0.0000,  0.0340,
+            #     -0.2417,  0.2159,  0.5405,  0.0742,  0.3223,  0.1885,  0.1092, -0.1985,
+            #     0.0000, -0.0586,  0.0438,  0.0000,  0.0000,  0.0000,  0.0000,  0.0000,
+            #     0.0000,  0.5009, -0.2511, -0.3044,  0.0000,  0.0000,  0.0000,  0.0000,
+            #     0.0000,  0.0000,  0.2435, -0.2755,  0.1623, -0.4876,  0.2677,  1.0613,
+            #     0.0237,  0.3914,  0.3581,  0.0000, -0.3219,  0.0000,  0.0000,  1.1413,
+            #     0.0000, -0.3984, -0.1023, -0.8554,  0.4992, -0.0125, -0.1497,
+            # ]], dtype=torch.float32)
+            # betas = torch.tensor([[0.7449,  0.1697,  1.3997, -0.3836,  1.2303, -1.6766, -0.0295, -1.0042,-0.9435, -0.4708]], dtype=torch.float32)
+
+
+            # print(body_pose)
+            # print(betas, gndr)
+
 
             output = model(
                 betas=betas,
@@ -265,7 +287,8 @@ def main(args):
                 tri_mesh = get_textured_mesh(vertices, texture_path=None, args=args)
  
             if args.uniform_background:
-                scene = pyrender.Scene(bg_color=generate_color())
+                # scene = pyrender.Scene(bg_color=generate_color())
+                scene = pyrender.Scene(bg_color=(255, 255, 255, 255))
             else:
                 scene = pyrender.Scene(bg_color=(255, 255, 255, 255))
 
@@ -298,6 +321,12 @@ def main(args):
                         rotation=args.rotation,
                         return_vectors=True
                     )
+
+                    cam_pose = [[-0.12818149,  0.98776279, -0.08884916, -0.17769831],
+                        [ 0.03007613,  0.09341863,  0.99517254,  1.99034508],
+                        [ 0.99129457,  0.12489046, -0.04168262, -0.08336524],
+                        [ 0.     ,     0.    ,      0.     ,     1.        ],]
+                    camera_position = np.array([-0.17769831,  1.99034508, -0.08336524])
 
                     last_camera_node = scene.add(camera, pose=cam_pose)
 
@@ -383,6 +412,24 @@ def main(args):
                             osp.join(args.out_folder, "{:d}_depth.jpg".format(img_id)),
                             depthmap.astype(np.uint8)
                         )
+                    if "SEGMENTATION" in args.gt_type:
+                        cv2.imwrite(
+                            osp.join(args.out_folder, "{:d}_mask.jpg".format(img_id)),
+                            (depthmap > 0).astype(np.uint8)
+                        )
+                        cv2.imwrite(
+                            osp.join(args.out_folder, "{:d}_mask.jpg".format(img_id)),
+                            ((depthmap > 0) * 255).astype(np.uint8)
+                        )
+                    if "POSE" in args.gt_type:
+                        posemap = np.zeros((1024, 1024, 3), dtype=np.uint8)
+                        posemap_all = draw_pose(posemap, joints_2d, joints_vis, draw_style="custom")
+                        if args.crop:
+                            posemap_all = posemap_all[crop_bbox[0]:crop_bbox[2], crop_bbox[1]:crop_bbox[3]]
+                        cv2.imwrite(
+                            osp.join(args.out_folder, "{:d}_pose_vis.jpg".format(img_id)),
+                            posemap_all.astype(np.uint8)
+                        )
                     if "OPENPOSE" in args.gt_type:
                         posemap = np.zeros((1024, 1024, 3), dtype=np.uint8)
                         posemap_all = draw_pose(posemap, joints_2d, joints_vis, draw_style="openpose")
@@ -454,6 +501,8 @@ def main(args):
                         "category_id": 1,
                         "id": int(abs(hash(img_name + str(view_idx))))
                     })
+
+                    print(img_name, cam_pose, camera_position)
 
                     progress_bar.update()
         
@@ -560,6 +609,8 @@ if __name__ == '__main__':
     if args.gt_type is None:
         args.gt_type = []
     args.gt_type = list(map(lambda x: x.upper(), args.gt_type))
+
+    args.gt_type = ["DEPTH", "OPENPOSE", "SEGMENTATION"]
 
     if args.out_folder is None:
         if args.rotation < 0:

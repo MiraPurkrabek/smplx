@@ -83,10 +83,12 @@ def generate_pose(typical_pose=None, simplicity=5, extreme_poses=False):
         "Left shoulder": [
             # Changed to move 0 along the body
             (-30, 30), (-90, 20), (-10, 140)
+            # (-30, 30), (-90, 20), (-90, 60)
         ],
         "Right shoulder": [
             # Changed to move 0 along the body
             (-30, 30), (-20, 90), (-140, 10)
+            # (-30, 30), (-20, 90), (-60, 70)
         ],
         "Left elbow": [
             (0, 0), (-120, 0), (0, 0)
